@@ -6,7 +6,7 @@ use dioxus::signals::Signal;
 struct WorkflowSettings {
     base_workflow: Signal<PathBuf>,
     modifications_file: Signal<Option<PathBuf>>,
-    fasta_file: Signal<Option<PathBuf>>,
+    protein_file: Signal<Option<PathBuf>>,
     input_files: Signal<Vec<PathBuf>>,
     output_directory: Signal<Option<PathBuf>>,
 }

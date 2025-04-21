@@ -1,9 +1,10 @@
 mod state;
 
+use color_eyre::Result;
 // The dioxus prelude contains a ton of common items used in dioxus apps. It's a good idea to import wherever you
 // need dioxus
 use dioxus::{
-    desktop::{self, Config, WindowBuilder},
+    desktop::{self, WindowBuilder},
     prelude::*,
 };
 
@@ -18,7 +19,8 @@ pub const FAVICON: Asset = asset!("/assets/favicon.ico");
 // The asset macro also minifies some assets like CSS and JS to make bundled smaller
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 
-fn main() {
+fn main() -> Result<()> {
+    color_eyre::install()?;
     // The `launch` function is the main entry point for a dioxus app. It takes a component and renders it with the platform feature
     // you have enabled
     dioxus::LaunchBuilder::new()
@@ -28,6 +30,8 @@ fn main() {
                 .with_window(WindowBuilder::new().with_title("Byos Queuer")),
         )
         .launch(App);
+
+    Ok(())
 }
 
 /// App is the main component of our app. Components are the building blocks of dioxus apps. Each component is a function
