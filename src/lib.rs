@@ -6,3 +6,4 @@
 // 5) Polish of UI + Skeleton (if time allows!)
 
 pub mod proteins;
+pub mod samples;
