@@ -308,6 +308,7 @@ dependencies = [
  "dioxus",
  "indoc",
  "seq_io",
+ "serde_json",
 ]
 
 [[package]]

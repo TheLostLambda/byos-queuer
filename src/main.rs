@@ -60,7 +60,7 @@ fn App() -> Element {
                     if let Some(file_engine) = evt.files() {
                         let files = file_engine.files();
                         for file_name in files {
-                            println!("{}", file_name);
+                            println!("{file_name}");
                         }
                     }
                 }
