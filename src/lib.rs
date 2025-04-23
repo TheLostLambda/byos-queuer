@@ -7,3 +7,4 @@
 pub mod modifications;
 pub mod proteins;
 pub mod samples;
+pub mod workflow;

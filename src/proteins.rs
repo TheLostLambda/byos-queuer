@@ -2,7 +2,7 @@
 use std::io::{BufRead, BufReader, Read};
 
 // External Crate Imports
-use color_eyre::Result;
+use color_eyre::{eyre::Context, Result};
 use seq_io::fasta::{OwnedRecord, Reader, Record};
 use serde_json::{json, Value};
 
@@ -16,14 +16,14 @@ impl Proteins {
         Reader::new(fasta)
             .into_records()
             .collect::<Result<_, _>>()
-            .map_err(Into::into)
+            .wrap_err("failed to read proteins from FASTA file")
     }
 
     pub fn from_txt(txt: impl Read) -> Result<Self> {
         BufReader::new(txt)
             .lines()
             .collect::<Result<_, _>>()
-            .map_err(Into::into)
+            .wrap_err("failed to read proteins from TXT file")
     }
 
     #[must_use]
