@@ -13,8 +13,8 @@ use crate::samples::Samples;
 
 #[derive(Clone, Debug)]
 struct Workflow {
-    workflow_name: String,
-    workflow_json: Value,
+    name: String,
+    json: Value,
     output_directory: PathBuf,
 }
 
@@ -36,9 +36,9 @@ impl Workflow {
 
         let output_directory = output_directory.as_ref().to_owned();
 
-        Ok(Workflow {
-            workflow_name: String::new(),
-            workflow_json,
+        Ok(Self {
+            name: String::new(),
+            json: workflow_json,
             output_directory,
         })
     }
@@ -46,9 +46,9 @@ impl Workflow {
         todo!()
     }
 
-    fn load_samples(sample_files: Vec<impl AsRef<Path>>) -> Samples {
+    fn load_samples(sample_files: &[impl AsRef<Path>]) -> Samples {
         // PERF: There is a lot of unnecessary cloning going on here, but I don't think that matters much at the moment
-        sample_files.iter().map(AsRef::as_ref).to_owned().collect()
+        sample_files.iter().map(AsRef::as_ref).clone().collect()
     }
 }
 
@@ -73,7 +73,7 @@ mod tests {
 
     #[test]
     fn samples_mut() {
-        let mut workflow_json = WORKFLOW.workflow_json.clone();
+        let mut workflow_json = WORKFLOW.json.clone();
         let samples_mut = workflow_json.pointer_mut(Workflow::SAMPLES_POINTER);
         assert!(samples_mut.is_some());
 
@@ -81,7 +81,7 @@ mod tests {
         assert!(samples_mut.is_array());
 
         let samples = samples_mut.as_array().unwrap();
-        assert!(samples.iter().all(|obj| obj.is_object()));
+        assert!(samples.iter().all(Value::is_object));
         assert_eq!(samples.len(), 3);
 
         let new_samples = json!([42, null, "wack"]);
@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn proteins_mut() {
-        let mut workflow_json = WORKFLOW.workflow_json.clone();
+        let mut workflow_json = WORKFLOW.json.clone();
         let proteins_mut = workflow_json.pointer_mut(Workflow::PROTEINS_POINTER);
         assert!(proteins_mut.is_some());
 
@@ -101,7 +101,7 @@ mod tests {
         assert!(proteins_mut.is_array());
 
         let proteins = proteins_mut.as_array().unwrap();
-        assert!(proteins.iter().all(|obj| obj.is_object()));
+        assert!(proteins.iter().all(Value::is_object));
         assert_eq!(proteins.len(), 42);
 
         let new_proteins = json!([42, null, "wack"]);
@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn modifications_mut() {
-        let mut workflow_json = WORKFLOW.workflow_json.clone();
+        let mut workflow_json = WORKFLOW.json.clone();
         let modifications_mut = workflow_json.pointer_mut(Workflow::MODIFICATIONS_POINTER);
         assert!(modifications_mut.is_some());
 
