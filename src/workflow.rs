@@ -6,19 +6,10 @@ use std::{
 };
 
 // External Crate Imports
-use color_eyre::{eyre::OptionExt, Result};
+use color_eyre::Result;
 use serde_json::Value;
 
 use crate::samples::Samples;
-
-#[derive(Clone, Debug)]
-struct WorkflowParameters {
-    base_workflow: PathBuf,
-    sample_files: Vec<PathBuf>,
-    protein_file: PathBuf,
-    modifications_file: Option<PathBuf>,
-    output_directory: PathBuf,
-}
 
 #[derive(Clone, Debug)]
 struct Workflow {
@@ -41,67 +32,50 @@ impl Workflow {
     ) -> Result<Self> {
         let file = File::open(base_workflow)?;
         let reader = BufReader::new(file);
-        let base_workflow: Value = serde_json::from_reader(reader)?;
-        todo!()
+        let mut workflow_json: Value = serde_json::from_reader(reader)?;
+
+        let output_directory = output_directory.as_ref().to_owned();
+
+        Ok(Workflow {
+            workflow_name: String::new(),
+            workflow_json,
+            output_directory,
+        })
     }
     pub fn to_wflw(&self) -> String {
-        let file = File::open(&self.base_workflow).unwrap();
-        let reader = BufReader::new(file);
-        let base_workflow: Value = serde_json::from_reader(reader).unwrap();
         todo!()
     }
 
-    fn load_samples(&self) -> Samples {
+    fn load_samples(sample_files: Vec<impl AsRef<Path>>) -> Samples {
         // PERF: There is a lot of unnecessary cloning going on here, but I don't think that matters much at the moment
-        self.sample_files.iter().cloned().collect()
-    }
-
-    fn samples_mut(&mut self) -> Result<&mut Value> {
-        self.base_workflow
-            .pointer_mut(Self::SAMPLES_POINTER)
-            .ok_or_eyre("the base workflow didn't contain the samples key at the right path")
-    }
-
-    fn proteins_mut(&mut self) -> Result<&mut Value> {
-        self.base_workflow
-            .pointer_mut(Self::PROTEINS_POINTER)
-            .ok_or_eyre("the base workflow didn't contain the proteins key at the right path")
-    }
-
-    fn modifications_mut(&mut self) -> Result<&mut Value> {
-        self.base_workflow
-            .pointer_mut(Self::MODIFICATIONS_POINTER)
-            .ok_or_eyre("the base workflow didn't contain the modifications key at the right path")
+        sample_files.iter().map(AsRef::as_ref).to_owned().collect()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::BufReader, sync::LazyLock};
+    use std::sync::LazyLock;
 
     use serde_json::json;
 
     use super::*;
 
-    static WORKFLOW: LazyLock<WorkflowParameters> = LazyLock::new(|| {
-        let file = File::open("./tests/data/PG Monomers (MS2).wflw").unwrap();
-        let reader = BufReader::new(file);
-        let base_workflow = serde_json::from_reader(reader).unwrap();
-
-        WorkflowParameters {
-            base_workflow,
-            sample_files: vec![],
-            protein_file: PathBuf::new(),
-            modifications_file: None,
-            output_directory: PathBuf::new(),
-        }
+    static WORKFLOW: LazyLock<Workflow> = LazyLock::new(|| {
+        Workflow::new(
+            "./tests/data/PG Monomers (MS2).wflw",
+            vec!["./"],
+            PathBuf::new(),
+            Some(PathBuf::new()),
+            PathBuf::new(),
+        )
+        .unwrap()
     });
 
     #[test]
     fn samples_mut() {
-        let mut workflow = WORKFLOW.clone();
-        let samples_mut = workflow.samples_mut();
-        assert!(samples_mut.is_ok());
+        let mut workflow_json = WORKFLOW.workflow_json.clone();
+        let samples_mut = workflow_json.pointer_mut(Workflow::SAMPLES_POINTER);
+        assert!(samples_mut.is_some());
 
         let samples_mut = samples_mut.unwrap();
         assert!(samples_mut.is_array());
@@ -113,15 +87,15 @@ mod tests {
         let new_samples = json!([42, null, "wack"]);
         *samples_mut = new_samples.clone();
 
-        let samples = workflow.samples_mut().unwrap();
+        let samples = workflow_json.pointer(Workflow::SAMPLES_POINTER).unwrap();
         assert_eq!(samples, &new_samples);
     }
 
     #[test]
     fn proteins_mut() {
-        let mut workflow = WORKFLOW.clone();
-        let proteins_mut = workflow.proteins_mut();
-        assert!(proteins_mut.is_ok());
+        let mut workflow_json = WORKFLOW.workflow_json.clone();
+        let proteins_mut = workflow_json.pointer_mut(Workflow::PROTEINS_POINTER);
+        assert!(proteins_mut.is_some());
 
         let proteins_mut = proteins_mut.unwrap();
         assert!(proteins_mut.is_array());
@@ -133,15 +107,15 @@ mod tests {
         let new_proteins = json!([42, null, "wack"]);
         *proteins_mut = new_proteins.clone();
 
-        let proteins = workflow.proteins_mut().unwrap();
+        let proteins = workflow_json.pointer(Workflow::PROTEINS_POINTER).unwrap();
         assert_eq!(proteins, &new_proteins);
     }
 
     #[test]
     fn modifications_mut() {
-        let mut workflow = WORKFLOW.clone();
-        let modifications_mut = workflow.modifications_mut();
-        assert!(modifications_mut.is_ok());
+        let mut workflow_json = WORKFLOW.workflow_json.clone();
+        let modifications_mut = workflow_json.pointer_mut(Workflow::MODIFICATIONS_POINTER);
+        assert!(modifications_mut.is_some());
 
         let modifications_mut = modifications_mut.unwrap();
         assert!(modifications_mut.is_string());
@@ -152,7 +126,9 @@ mod tests {
         let new_modifications = json!([42, null, "wack"]);
         *modifications_mut = new_modifications.clone();
 
-        let modifications = workflow.modifications_mut().unwrap();
+        let modifications = workflow_json
+            .pointer(Workflow::MODIFICATIONS_POINTER)
+            .unwrap();
         assert_eq!(modifications, &new_modifications);
     }
 }
