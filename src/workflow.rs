@@ -31,14 +31,21 @@ impl Workflow {
         modifications_file: Option<impl AsRef<Path> + Copy>,
         output_directory: impl AsRef<Path>,
     ) -> Result<Self> {
+        let name = Self::workflow_name(
+            base_workflow,
+            sample_files,
+            protein_file,
+            modifications_file,
+        )?;
+
         let workflow_reader = BufReader::new(File::open(base_workflow)?);
-        let mut workflow_json: Value = serde_json::from_reader(workflow_reader)?;
+        let mut json: Value = serde_json::from_reader(workflow_reader)?;
 
         let output_directory = output_directory.as_ref().to_owned();
 
         Ok(Self {
-            name: String::new(),
-            json: workflow_json,
+            name,
+            json,
             output_directory,
         })
     }
