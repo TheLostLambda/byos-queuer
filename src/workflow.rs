@@ -1,12 +1,13 @@
 // Standard Library Imports
 use std::{
+    ffi::OsStr,
     fs::File,
     io::{BufReader, Seek},
     path::{Path, PathBuf},
 };
 
 // External Crate Imports
-use color_eyre::{eyre::eyre, Result};
+use color_eyre::{Result, eyre::eyre};
 use serde_json::Value;
 
 use crate::{modifications::Modifications, proteins::Proteins, samples::Samples};
@@ -24,10 +25,10 @@ impl Workflow {
     const MODIFICATIONS_POINTER: &str = "/tabs/2/cells/0/properties/13/value/modifications";
 
     pub fn new(
-        base_workflow: impl AsRef<Path>,
-        sample_files: &[impl AsRef<Path>],
-        protein_file: impl AsRef<Path>,
-        modifications_file: Option<impl AsRef<Path>>,
+        base_workflow: impl AsRef<Path> + Copy,
+        sample_files: impl IntoIterator<Item = impl AsRef<Path>> + Copy,
+        protein_file: impl AsRef<Path> + Copy,
+        modifications_file: Option<impl AsRef<Path> + Copy>,
         output_directory: impl AsRef<Path>,
     ) -> Result<Self> {
         let workflow_reader = BufReader::new(File::open(base_workflow)?);
@@ -43,6 +44,47 @@ impl Workflow {
     }
     pub fn to_wflw(&self) -> String {
         todo!()
+    }
+
+    fn workflow_name(
+        base_workflow: impl AsRef<Path>,
+        sample_files: impl IntoIterator<Item = impl AsRef<Path>>,
+        protein_file: impl AsRef<Path>,
+        modifications_file: Option<impl AsRef<Path>>,
+    ) -> Result<String> {
+        fn file_part(
+            part: impl Fn(&Path) -> Option<&OsStr>,
+            path: impl AsRef<Path>,
+        ) -> Result<String> {
+            let path = path.as_ref();
+            part(path)
+                // PERF: This could be `OsStr::display` and the function could return `impl Display`, but that makes
+                // using `.join()` later on a bit more complicated and requires this function to take a reference
+                // instead of just `impl AsRef<Path>`...
+                .map(|osstr| osstr.to_string_lossy().into_owned())
+                .ok_or_else(|| eyre!("could not extract a file name from {}", path.display()))
+        }
+
+        let base_workflow = file_part(Path::file_stem, base_workflow)?;
+
+        let sample_files = sample_files
+            .into_iter()
+            .map(|path| file_part(Path::file_stem, path))
+            .collect::<Result<Vec<_>>>()?
+            .join(", ");
+
+        let protein_file = file_part(Path::file_name, protein_file)?;
+
+        let modifications_file = if let Some(modifications_file) = modifications_file {
+            let modifications_file = file_part(Path::file_name, modifications_file)?;
+            format!("; {modifications_file}")
+        } else {
+            String::new()
+        };
+
+        Ok(format!(
+            "{base_workflow} ({sample_files}; {protein_file}{modifications_file}).wflw"
+        ))
     }
 
     fn load_samples(sample_files: &[impl AsRef<Path>]) -> Result<Samples> {
@@ -84,19 +126,22 @@ mod tests {
 
     use super::*;
 
+    const BASE_WORKFLOW: &str = "tests/data/PG Monomers.wflw";
     const SAMPLE_FILES: [&str; 2] = ["tests/data/WT.raw", "tests/data/6ldt.raw"];
-
     const PROTEIN_FASTA_FILE: &str = "tests/data/proteins.fasta";
     const PROTEIN_TXT_FILE: &str = "tests/data/proteins.txt";
     const MODIFICATIONS_FILE: &str = "tests/data/modifications.txt";
 
+    // NOTE: This directory doesn't actually exist...
+    const OUTPUT_DIRECTORY: &str = "tests/data/output/";
+
     static WORKFLOW: LazyLock<Workflow> = LazyLock::new(|| {
         Workflow::new(
-            "tests/data/PG Monomers (MS2).wflw",
-            &SAMPLE_FILES,
-            PathBuf::new(),
-            Some(PathBuf::new()),
-            PathBuf::new(),
+            BASE_WORKFLOW,
+            SAMPLE_FILES,
+            PROTEIN_FASTA_FILE,
+            Some(MODIFICATIONS_FILE),
+            OUTPUT_DIRECTORY,
         )
         .unwrap()
     });
@@ -160,6 +205,36 @@ mod tests {
             .pointer(Workflow::MODIFICATIONS_POINTER)
             .unwrap();
         assert_eq!(modifications, &new_modifications);
+    }
+
+    #[test]
+    fn workflow_name_with_modifications() {
+        let expected = "PG Monomers (WT, 6ldt; proteins.fasta; modifications.txt).wflw";
+
+        let workflow_name = Workflow::workflow_name(
+            BASE_WORKFLOW,
+            SAMPLE_FILES,
+            PROTEIN_FASTA_FILE,
+            Some(MODIFICATIONS_FILE),
+        );
+        assert!(workflow_name.is_ok());
+
+        assert_eq!(workflow_name.unwrap(), expected);
+    }
+
+    #[test]
+    fn workflow_name_without_modifications() {
+        let expected = "PG Monomers (WT, 6ldt; proteins.fasta).wflw";
+
+        let workflow_name = Workflow::workflow_name(
+            BASE_WORKFLOW,
+            SAMPLE_FILES,
+            PROTEIN_FASTA_FILE,
+            None::<&str>,
+        );
+        assert!(workflow_name.is_ok());
+
+        assert_eq!(workflow_name.unwrap(), expected);
     }
 
     #[test]
