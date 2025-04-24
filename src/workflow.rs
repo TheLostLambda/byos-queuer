@@ -1,7 +1,7 @@
 // Standard Library Imports
 use std::{
     fs::File,
-    io::BufReader,
+    io::{BufReader, Seek},
     path::{Path, PathBuf},
 };
 
@@ -9,7 +9,7 @@ use std::{
 use color_eyre::Result;
 use serde_json::Value;
 
-use crate::samples::Samples;
+use crate::{proteins::Proteins, samples::Samples};
 
 #[derive(Clone, Debug)]
 struct Workflow {
@@ -25,14 +25,13 @@ impl Workflow {
 
     pub fn new(
         base_workflow: impl AsRef<Path>,
-        sample_files: Vec<impl AsRef<Path>>,
+        sample_files: &[impl AsRef<Path>],
         protein_file: impl AsRef<Path>,
         modifications_file: Option<impl AsRef<Path>>,
         output_directory: impl AsRef<Path>,
     ) -> Result<Self> {
-        let file = File::open(base_workflow)?;
-        let reader = BufReader::new(file);
-        let mut workflow_json: Value = serde_json::from_reader(reader)?;
+        let workflow_reader = BufReader::new(File::open(base_workflow)?);
+        let mut workflow_json: Value = serde_json::from_reader(workflow_reader)?;
 
         let output_directory = output_directory.as_ref().to_owned();
 
@@ -50,6 +49,14 @@ impl Workflow {
         // PERF: There is a lot of unnecessary cloning going on here, but I don't think that matters much at the moment
         sample_files.iter().map(AsRef::as_ref).clone().collect()
     }
+
+    fn load_proteins(protein_file: impl AsRef<Path>) -> Result<Proteins> {
+        let mut file = File::open(protein_file)?;
+        Proteins::from_fasta(file.try_clone()?).or_else(|_| {
+            file.rewind()?;
+            Proteins::from_txt(dbg!(file))
+        })
+    }
 }
 
 #[cfg(test)]
@@ -60,10 +67,19 @@ mod tests {
 
     use super::*;
 
+    const SAMPLE_FILES: [&str; 3] = [
+        "C:/Users/MBB-Byonic/Desktop/Data to deconvolute March 2025/Fuso_3.raw",
+        "C:/Users/MBB-Byonic/Desktop/Data to deconvolute March 2025/Fuso_2.raw",
+        "C:/Users/MBB-Byonic/Desktop/Data to deconvolute March 2025/Fuso_1.raw",
+    ];
+
+    const PROTEIN_FASTA_FILE: &str = "tests/data/proteins.fasta";
+    const PROTEIN_TXT_FILE: &str = "tests/data/proteins.txt";
+
     static WORKFLOW: LazyLock<Workflow> = LazyLock::new(|| {
         Workflow::new(
-            "./tests/data/PG Monomers (MS2).wflw",
-            vec!["./"],
+            "tests/data/PG Monomers (MS2).wflw",
+            &SAMPLE_FILES,
             PathBuf::new(),
             Some(PathBuf::new()),
             PathBuf::new(),
@@ -130,5 +146,44 @@ mod tests {
             .pointer(Workflow::MODIFICATIONS_POINTER)
             .unwrap();
         assert_eq!(modifications, &new_modifications);
+    }
+
+    #[test]
+    fn load_samples() {
+        let expected = SAMPLE_FILES.into_iter().collect();
+
+        let samples = Workflow::load_samples(&SAMPLE_FILES);
+
+        assert_eq!(samples, expected);
+    }
+
+    #[test]
+    fn load_proteins_fasta() {
+        let expected = [
+            ("P01013", "QIKDLLVSSSTDLDTTLVLVNAIYFKGMWKTAFNAEDTREMPFHVTKQESKPVQMMCMNNSFNVATLPAEKMKILELPFASGDLSMLVLLPDEVSDLERIEKTINFEKLTEWTNPNTMEKRRVKVYLPQMKIEEKYNLTSVLMALGMTDLFIPSANLTGISSAESLKISQAVHGAFMELSEDGIEMAGSTGVIEDIKHSPESEQFRADHPFLFLIKHNPTNTIVYFGRYWSP"),
+            ("Z1072", "MKATKLVLGAVILGSTLLAGCSSNAKIDQLSSDVQTLNAKVDQLSNDVNAMRSDVQAAKDDAARANQRLDNMATKYRK"),
+        ].into_iter().collect();
+
+        let proteins = Workflow::load_proteins(PROTEIN_FASTA_FILE);
+        assert!(proteins.is_ok());
+
+        assert_eq!(proteins.unwrap(), expected);
+    }
+
+    #[test]
+    fn load_proteins_txt() {
+        let expected = [
+            ("AEJAA", "AEJAA"),
+            ("AEJA", "AEJA"),
+            ("AEJ", "AEJ"),
+            ("AE", "AE"),
+        ]
+        .into_iter()
+        .collect();
+
+        let proteins = Workflow::load_proteins(PROTEIN_TXT_FILE);
+        assert!(proteins.is_ok());
+
+        assert_eq!(proteins.unwrap(), expected);
     }
 }
