@@ -1,0 +1,3 @@
+% Custom modification text below
+HexNAc(1)MurNAc_alditol(1) @ NTerm | common1
+HexN(1) MurNAc_alditol(1) @ NTerm | common1

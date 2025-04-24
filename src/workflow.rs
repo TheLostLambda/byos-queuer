@@ -6,10 +6,10 @@ use std::{
 };
 
 // External Crate Imports
-use color_eyre::Result;
+use color_eyre::{eyre::eyre, Result};
 use serde_json::Value;
 
-use crate::{proteins::Proteins, samples::Samples};
+use crate::{modifications::Modifications, proteins::Proteins, samples::Samples};
 
 #[derive(Clone, Debug)]
 struct Workflow {
@@ -45,9 +45,17 @@ impl Workflow {
         todo!()
     }
 
-    fn load_samples(sample_files: &[impl AsRef<Path>]) -> Samples {
+    fn load_samples(sample_files: &[impl AsRef<Path>]) -> Result<Samples> {
+        // NOTE: Though this program never actually needs to open any of the sample files, it's worth making sure that
+        // the paths exist now so that any errors are reported early instead of when a Byos search fails in the future
+        let missing_file = sample_files.iter().find(|&path| !path.as_ref().exists());
+        if let Some(missing_file) = missing_file {
+            let missing_file = missing_file.as_ref().display();
+            return Err(eyre!("failed to find `{missing_file}`"));
+        }
+
         // PERF: There is a lot of unnecessary cloning going on here, but I don't think that matters much at the moment
-        sample_files.iter().map(AsRef::as_ref).clone().collect()
+        Ok(sample_files.iter().map(AsRef::as_ref).clone().collect())
     }
 
     fn load_proteins(protein_file: impl AsRef<Path>) -> Result<Proteins> {
@@ -56,6 +64,15 @@ impl Workflow {
             file.rewind()?;
             Proteins::from_txt(dbg!(file))
         })
+    }
+
+    fn load_modifications(modifications_file: Option<impl AsRef<Path>>) -> Result<Modifications> {
+        if let Some(modifications_file) = modifications_file {
+            let file = File::open(modifications_file)?;
+            Modifications::from_txt(file)
+        } else {
+            Ok(Modifications::default())
+        }
     }
 }
 
@@ -67,14 +84,11 @@ mod tests {
 
     use super::*;
 
-    const SAMPLE_FILES: [&str; 3] = [
-        "C:/Users/MBB-Byonic/Desktop/Data to deconvolute March 2025/Fuso_3.raw",
-        "C:/Users/MBB-Byonic/Desktop/Data to deconvolute March 2025/Fuso_2.raw",
-        "C:/Users/MBB-Byonic/Desktop/Data to deconvolute March 2025/Fuso_1.raw",
-    ];
+    const SAMPLE_FILES: [&str; 2] = ["tests/data/WT.raw", "tests/data/6ldt.raw"];
 
     const PROTEIN_FASTA_FILE: &str = "tests/data/proteins.fasta";
     const PROTEIN_TXT_FILE: &str = "tests/data/proteins.txt";
+    const MODIFICATIONS_FILE: &str = "tests/data/modifications.txt";
 
     static WORKFLOW: LazyLock<Workflow> = LazyLock::new(|| {
         Workflow::new(
@@ -153,8 +167,9 @@ mod tests {
         let expected = SAMPLE_FILES.into_iter().collect();
 
         let samples = Workflow::load_samples(&SAMPLE_FILES);
+        assert!(samples.is_ok());
 
-        assert_eq!(samples, expected);
+        assert_eq!(samples.unwrap(), expected);
     }
 
     #[test]
@@ -185,5 +200,18 @@ mod tests {
         assert!(proteins.is_ok());
 
         assert_eq!(proteins.unwrap(), expected);
+    }
+
+    #[test]
+    fn load_modifications() {
+        let expected = Modifications("% Custom modification text below\nHexNAc(1)MurNAc_alditol(1) @ NTerm | common1\nHexN(1) MurNAc_alditol(1) @ NTerm | common1\n".to_owned());
+
+        let modifications = Workflow::load_modifications(Some(MODIFICATIONS_FILE));
+        assert!(modifications.is_ok());
+
+        assert_eq!(modifications.unwrap(), expected);
+
+        let empty_modifications = Workflow::load_modifications(None::<&str>);
+        assert_eq!(empty_modifications.unwrap(), Modifications::default());
     }
 }

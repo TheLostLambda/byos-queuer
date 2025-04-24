@@ -7,8 +7,8 @@ use serde_json::Value;
 
 // Public API ==========================================================================================================
 
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct Modifications(String);
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct Modifications(pub(crate) String);
 
 impl Modifications {
     pub fn from_txt(mut txt: impl Read) -> Result<Self> {
