@@ -1,0 +1,762 @@
+{
+  "extendedMetadata": {
+    "cache": [],
+    "connections": []
+  },
+  "metadata": "{\"created\":\"2025-04-11T12:30:04\",\"description\":\"Identification and quantification of modifications \",\"icon\":\"ptm-analysis\",\"name\":\"PG Monomers (MS2)\",\"user\":\"MBB-Byonic\",\"version\":\"5.16.1\",\"workflowType\":\"PTM\"}",
+  "tabs": [
+    {
+      "cells": [
+        {
+          "metadata": "{\"created\":\"2025-04-11T12:30:04\",\"user\":\"MBB-Byonic\",\"version\":\"5.16.1\"}",
+          "name": "Samples (drag and drop MS files)",
+          "properties": [
+            {
+              "name": "Samples",
+              "value": {
+                "CustomColumnsMetaData": [],
+                "Samples": [
+                  {
+                    "CustomColumnsData": [],
+                    "Digestion": "",
+                    "InSilicoList": "",
+                    "Metadata": {
+                      "remote_name": "",
+                      "remote_path": "",
+                      "server": "",
+                      "type": 0,
+                      "uuid": ""
+                    },
+                    "Ms2File": [],
+                    "Ms2Search": [],
+                    "MsFile": "tests/data/WT.raw",
+                    "SampleName": "WT",
+                    "SampleType": "Reference",
+                    "SamplesId": 1,
+                    "TraceFiles": []
+                  },
+                  {
+                    "CustomColumnsData": [],
+                    "Digestion": "",
+                    "InSilicoList": "",
+                    "Metadata": {
+                      "remote_name": "",
+                      "remote_path": "",
+                      "server": "",
+                      "type": 0,
+                      "uuid": ""
+                    },
+                    "Ms2File": [],
+                    "Ms2Search": [],
+                    "MsFile": "tests/data/6ldt.raw",
+                    "SampleName": "6ldt",
+                    "SampleType": "Reference",
+                    "SamplesId": 2,
+                    "TraceFiles": []
+                  }
+                ],
+                "TraceImportAndProcessingOptions": {
+                  "elutionPeaksOptionsList": [],
+                  "globalElutionPeakFilters": {
+                    "peakComparisonOptions": {
+                      "flagIfPeakRatioAboveOrBelow": true,
+                      "peakRatio": {
+                        "sigFig": 4,
+                        "value": 10
+                      }
+                    },
+                    "peakFilter": {
+                      "minimumPeakArea": {
+                        "sigFig": 2,
+                        "value": 5
+                      },
+                      "showPeaksWithinTimeInterest": false,
+                      "timeInterest": {
+                        "endTime": {
+                          "sigFig": 2,
+                          "value": 0
+                        },
+                        "startTime": {
+                          "sigFig": 2,
+                          "value": 0
+                        }
+                      }
+                    }
+                  },
+                  "tracesForFile": [],
+                  "tracesImportList": []
+                }
+              }
+            }
+          ],
+          "type": "Samples"
+        }
+      ],
+      "columns": [
+        "Samples (drag and drop MS files)"
+      ],
+      "name": "Samples"
+    },
+    {
+      "cells": [
+        {
+          "metadata": "{\"created\":\"2025-04-11T12:30:04\",\"user\":\"MBB-Byonic\",\"version\":\"5.16.1\"}",
+          "name": "Proteins (drag and drop FASTA files)",
+          "properties": [
+            {
+              "name": "Proteins",
+              "value": {
+                "children": [
+                  {
+                    "children": [],
+                    "data": [
+                      "P01013",
+                      "",
+                      "QIKDLLVSSSTDLDTTLVLVNAIYFKGMWKTAFNAEDTREMPFHVTKQESKPVQMMCMNNSFNVATLPAEKMKILELPFASGDLSMLVLLPDEVSDLERIEKTINFEKLTEWTNPNTMEKRRVKVYLPQMKIEEKYNLTSVLMALGMTDLFIPSANLTGISSAESLKISQAVHGAFMELSEDGIEMAGSTGVIEDIKHSPESEQFRADHPFLFLIKHNPTNTIVYFGRYWSP",
+                      null,
+                      1
+                    ]
+                  },
+                  {
+                    "children": [],
+                    "data": [
+                      "Z1072",
+                      "",
+                      "MKATKLVLGAVILGSTLLAGCSSNAKIDQLSSDVQTLNAKVDQLSNDVNAMRSDVQAAKDDAARANQRLDNMATKYRK",
+                      null,
+                      2
+                    ]
+                  }
+                ],
+                "data": [
+                  "ProteinAccessionName",
+                  "ProteinAliasName",
+                  "ProteinSequence",
+                  "AverageMass",
+                  "ProteinsId"
+                ]
+              }
+            }
+          ],
+          "type": "Proteins"
+        }
+      ],
+      "columns": [
+        "Proteins (drag and drop FASTA files)"
+      ],
+      "name": "Sequences"
+    },
+    {
+      "cells": [
+        {
+          "metadata": "{\"created\":\"2025-04-11T12:30:04\",\"user\":\"MBB-Byonic\",\"version\":\"5.16.1\"}",
+          "name": "MS/MS Ids (Byonic)",
+          "properties": [
+            {
+              "name": "SamplesList",
+              "priority": 1,
+              "value": "*"
+            },
+            {
+              "group": "Protein database options",
+              "name": "DatabasesAddCommonContaminants",
+              "priority": 1,
+              "value": "false"
+            },
+            {
+              "group": "Protein database options",
+              "name": "DatabasesAddDecoys",
+              "priority": 1,
+              "value": "true"
+            },
+            {
+              "name": "ByonicResultsSuffix",
+              "priority": 1,
+              "value": "Byonic"
+            },
+            {
+              "group": "Instrument Parameters",
+              "name": "ByonicPrecursorMassError",
+              "priority": 1,
+              "value": {
+                "unit": "ppm",
+                "value": 10
+              }
+            },
+            {
+              "group": "Instrument Parameters",
+              "name": "ByonicMachineType",
+              "priority": 1,
+              "value": 2
+            },
+            {
+              "group": "Instrument Parameters",
+              "name": "ByonicFragmentMassError1",
+              "priority": 1,
+              "value": {
+                "unit": "ppm",
+                "value": 20
+              }
+            },
+            {
+              "group": "Instrument Parameters",
+              "name": "ByonicFragmentMassError2",
+              "priority": 1,
+              "value": {
+                "unit": "ppm",
+                "value": 20
+              }
+            },
+            {
+              "group": "Instrument Parameters",
+              "name": "ByonicLockMassList",
+              "priority": 1,
+              "value": "None"
+            },
+            {
+              "group": "Digestion",
+              "name": "ByonicDigestLetters",
+              "priority": 1,
+              "value": ""
+            },
+            {
+              "group": "Digestion",
+              "name": "ByonicDigestCutterType",
+              "priority": 1,
+              "value": 0
+            },
+            {
+              "group": "Digestion",
+              "name": "ByonicDigestType",
+              "priority": 1,
+              "value": 2
+            },
+            {
+              "group": "Digestion",
+              "name": "ByonicMaximumMissedCleavages",
+              "priority": 1,
+              "value": 0
+            },
+            {
+              "group": "Modifications",
+              "name": "ByonicModText",
+              "priority": 1,
+              "value": {
+                "modifications": "% Custom modification text below\nHexNAc(1)MurNAc_alditol(1) @ NTerm | common1\nHexN(1) MurNAc_alditol(1) @ NTerm | common1\n"
+              }
+            },
+            {
+              "group": "Modifications",
+              "name": "TotalCommonMax",
+              "priority": 1,
+              "value": 1
+            },
+            {
+              "group": "Modifications",
+              "name": "TotalRareMax",
+              "priority": 1,
+              "value": 1
+            },
+            {
+              "group": "Glycans",
+              "name": "ByonicGlycanText",
+              "priority": 1,
+              "value": {
+                "glycans": "% Custom modification text below\n"
+              }
+            },
+            {
+              "group": "Inclusion",
+              "name": "ByonicInclusionListCsv",
+              "priority": 1,
+              "value": ""
+            },
+            {
+              "group": "MS/MS Filtering",
+              "name": "ByonicPeakFilterSelected",
+              "priority": 1,
+              "value": {}
+            },
+            {
+              "group": "MS/MS Filtering",
+              "name": "ByonicPeakFilterMzTol",
+              "priority": 1,
+              "value": "0.02"
+            },
+            {
+              "group": "MS/MS Filtering",
+              "name": "ByonicPeakFilterMinNumber",
+              "priority": 1,
+              "value": 0
+            },
+            {
+              "group": "Spectrum Input Options",
+              "name": "ByonicApplyChargesIndex",
+              "priority": 1,
+              "value": 1
+            },
+            {
+              "group": "Spectrum Input Options",
+              "name": "ByonicApplyChargesText",
+              "priority": 1,
+              "value": ""
+            },
+            {
+              "group": "Spectrum Input Options",
+              "name": "ByonicOffByOne",
+              "priority": 1,
+              "value": 3
+            },
+            {
+              "group": "Spectrum Input Options",
+              "name": "ByonicPrecursorMassMax",
+              "priority": 1,
+              "value": "10000"
+            },
+            {
+              "group": "Spectrum Input Options",
+              "name": "ByonicPrecursorAssignments",
+              "priority": 1,
+              "value": 1
+            },
+            {
+              "group": "Spectrum Input Options",
+              "name": "ByonicMaxPrecursors",
+              "priority": 1,
+              "value": 1
+            },
+            {
+              "group": "Spectrum Input Options",
+              "name": "ByonicCentroidWidthVal",
+              "priority": 1,
+              "value": "0.01"
+            },
+            {
+              "group": "Peptide Output Options",
+              "name": "ByonicCombyneAutoScore",
+              "priority": 1,
+              "value": "false"
+            },
+            {
+              "group": "Peptide Output Options",
+              "name": "ByonicCombyneMinScore",
+              "priority": 1,
+              "value": "-9999"
+            },
+            {
+              "group": "Peptide Output Options",
+              "name": "ByonicEnablePromoteScoreNglycan",
+              "priority": 1,
+              "value": "false"
+            },
+            {
+              "group": "Protein Output Options",
+              "name": "ByonicProteinFdrPulldown",
+              "priority": 1,
+              "value": 0
+            },
+            {
+              "group": "Protein Output Options",
+              "name": "ByonicFocusedDatabaseCheckbox",
+              "priority": 1,
+              "value": "false"
+            },
+            {
+              "group": "Protein Output Options",
+              "name": "ByonicExportMzIdentMLCheckbox",
+              "priority": 1,
+              "value": "false"
+            },
+            {
+              "group": "Multicore options",
+              "name": "MulticoreOptions",
+              "priority": 1,
+              "value": 2
+            },
+            {
+              "group": "Wildcard",
+              "name": "ByonicWildcard",
+              "priority": 1,
+              "value": 0
+            },
+            {
+              "group": "Wildcard",
+              "name": "ByonicWildcardMinMass",
+              "priority": 1,
+              "value": -40
+            },
+            {
+              "group": "Wildcard",
+              "name": "ByonicWildcardMaxMass",
+              "priority": 1,
+              "value": 100
+            },
+            {
+              "group": "Wildcard",
+              "name": "ByonicWildcardResidues",
+              "priority": 1,
+              "value": ""
+            },
+            {
+              "group": "Report",
+              "name": "EnableExcelReport",
+              "priority": 1,
+              "value": "false"
+            }
+          ],
+          "type": "Byonic"
+        },
+        {
+          "metadata": "{\"created\":\"2025-04-11T12:30:04\",\"user\":\"MBB-Byonic\",\"version\":\"5.16.1\"}",
+          "name": "Quant (Byologic)",
+          "properties": [
+            {
+              "name": "SamplesList",
+              "priority": 1,
+              "value": "*"
+            },
+            {
+              "group": "In-silico options (Theoretical Digest)",
+              "name": "EnableInsilico",
+              "priority": 1,
+              "value": "false"
+            },
+            {
+              "group": "In-silico options (Theoretical Digest)",
+              "name": "Digestion",
+              "priority": 1,
+              "value": "Trypsin @ R,K | C-term"
+            },
+            {
+              "group": "In-silico options (Theoretical Digest)",
+              "name": "MissedCleavage",
+              "priority": 1,
+              "value": "0"
+            },
+            {
+              "group": "In-silico options (Theoretical Digest)",
+              "name": "PeptideMassRangeMin",
+              "priority": 1,
+              "value": {
+                "unit": "da",
+                "value": 25
+              }
+            },
+            {
+              "group": "In-silico options (Theoretical Digest)",
+              "name": "PeptideMassRangeMax",
+              "priority": 1,
+              "value": {
+                "unit": "da",
+                "value": 9000
+              }
+            },
+            {
+              "group": "In-silico options (Theoretical Digest)",
+              "name": "TotalCommonMax",
+              "priority": 1,
+              "value": 1
+            },
+            {
+              "group": "In-silico options (Theoretical Digest)",
+              "name": "TotalRareMax",
+              "priority": 1,
+              "value": 1
+            },
+            {
+              "group": "In-silico options (Theoretical Digest)",
+              "name": "Glycans",
+              "priority": 1,
+              "value": {}
+            },
+            {
+              "group": "In-silico options (Theoretical Digest)",
+              "name": "Modifications",
+              "priority": 1,
+              "value": {}
+            },
+            {
+              "group": "In-silico options (CSV import)",
+              "name": "InsilicoPeptidesCsv",
+              "priority": 1,
+              "value": ""
+            },
+            {
+              "group": "In-silico options (both theoretical digest and CSV import)",
+              "name": "SkipDuplicates",
+              "priority": 1,
+              "value": "true"
+            },
+            {
+              "group": "MS extract options",
+              "name": "RelevantPeptides",
+              "priority": 1,
+              "value": 2
+            },
+            {
+              "group": "MS extract options",
+              "name": "MZTolerance",
+              "priority": 1,
+              "value": "18"
+            },
+            {
+              "group": "MS extract options",
+              "name": "ApexMinutes",
+              "priority": 1,
+              "value": "2"
+            },
+            {
+              "group": "MS extract options",
+              "name": "XICMinutes",
+              "priority": 1,
+              "value": "2"
+            },
+            {
+              "group": "MS extract options",
+              "name": "IsotopeXIC",
+              "priority": 1,
+              "value": {
+                "children": [
+                  {
+                    "children": [],
+                    "data": [
+                      "0",
+                      "1800"
+                    ]
+                  },
+                  {
+                    "children": [],
+                    "data": [
+                      "1",
+                      "3000"
+                    ]
+                  },
+                  {
+                    "children": [],
+                    "data": [
+                      "2",
+                      "5000"
+                    ]
+                  },
+                  {
+                    "children": [],
+                    "data": [
+                      "3",
+                      "8000"
+                    ]
+                  },
+                  {
+                    "children": [],
+                    "data": [
+                      "4",
+                      "10000"
+                    ]
+                  },
+                  {
+                    "children": [],
+                    "data": [
+                      "5",
+                      "20000"
+                    ]
+                  },
+                  {
+                    "children": [],
+                    "data": [
+                      "6",
+                      "40000"
+                    ]
+                  },
+                  {
+                    "children": [],
+                    "data": [
+                      "7",
+                      "80000"
+                    ]
+                  }
+                ],
+                "data": [
+                  "Offset from\nmonoisotope",
+                  "Up to mass\n(Dalton)"
+                ]
+              }
+            },
+            {
+              "group": "Advanced",
+              "name": "EnableLockMassCalibration",
+              "priority": 1,
+              "value": "false"
+            },
+            {
+              "group": "Advanced",
+              "name": "LockMass",
+              "priority": 1,
+              "value": "1221.990637"
+            },
+            {
+              "group": "Advanced",
+              "name": "MassTolerance",
+              "priority": 1,
+              "value": "100"
+            },
+            {
+              "group": "Advanced",
+              "name": "CentroidSmoothingWidth",
+              "priority": 1,
+              "value": "0.02"
+            },
+            {
+              "group": "Advanced",
+              "name": "ElutionPredictionScoreMin",
+              "priority": 1,
+              "value": "300"
+            },
+            {
+              "group": "Advanced",
+              "name": "ComputeFragmentCoverage",
+              "priority": 1,
+              "value": "true"
+            },
+            {
+              "group": "Advanced",
+              "name": "AdvancedConfiguration",
+              "priority": 1,
+              "value": "[FeaturesFinderOptions]\nmakeFTRS=True"
+            },
+            {
+              "group": "Report",
+              "name": "ReportModuleConfigurationPath",
+              "priority": 1,
+              "value": "C:/Program Files/ProteinMetrics/PMI-Suite/Base/presets/Byologic/report_config/Blgc_PTM (Default).rptc"
+            },
+            {
+              "group": "UI Configurations",
+              "name": "UIConfigsFilters",
+              "priority": 1,
+              "value": ""
+            },
+            {
+              "group": "UI Configurations",
+              "name": "UIConfigsLayout",
+              "priority": 1,
+              "value": ""
+            },
+            {
+              "group": "Feature Finder",
+              "name": "FFEnable",
+              "priority": 1,
+              "value": "true"
+            },
+            {
+              "group": "Feature Finder",
+              "name": "FFAveragineCorrCutoff",
+              "priority": 1,
+              "value": "0.9"
+            },
+            {
+              "group": "Feature Finder",
+              "name": "FFMWRangeMin",
+              "priority": 1,
+              "value": "25"
+            },
+            {
+              "group": "Feature Finder",
+              "name": "FFMWRangeMax",
+              "priority": 1,
+              "value": "8000"
+            },
+            {
+              "group": "Feature Finder",
+              "name": "FFMaxFeatureCount",
+              "priority": 1,
+              "value": 500
+            },
+            {
+              "group": "Feature Finder",
+              "name": "FFAbsoluteIntensityCutoff",
+              "priority": 1,
+              "value": "0"
+            },
+            {
+              "group": "Feature Finder",
+              "name": "FFMinIsotopeCount",
+              "priority": 1,
+              "value": 3
+            },
+            {
+              "group": "Feature Finder",
+              "name": "FFMinPeakWidth",
+              "priority": 1,
+              "value": "0.01"
+            },
+            {
+              "group": "Feature Finder",
+              "name": "FFMinSNRatio",
+              "priority": 1,
+              "value": 3
+            },
+            {
+              "group": "Feature Finder",
+              "name": "FFMinScanCount",
+              "priority": 1,
+              "value": 3
+            },
+            {
+              "group": "Feature Finder",
+              "name": "FFExcludeChargeOnlyFeatures",
+              "priority": 1,
+              "value": "false"
+            },
+            {
+              "group": "Feature Finder",
+              "name": "FFMS2Matching",
+              "priority": 1,
+              "value": "false"
+            },
+            {
+              "group": "Feature Finder",
+              "name": "FFMassMatchingTolerance",
+              "priority": 1,
+              "value": "10"
+            },
+            {
+              "group": "Feature Finder",
+              "name": "FFApexTimeMatchingTolerance",
+              "priority": 1,
+              "value": "0.2"
+            },
+            {
+              "group": "XIC",
+              "name": "XicMode",
+              "priority": 1,
+              "value": "Regular"
+            },
+            {
+              "group": "XIC",
+              "name": "FastXicGranularity",
+              "priority": 1,
+              "value": 100000
+            },
+            {
+              "group": "XIC",
+              "name": "FastXicMaxMz",
+              "priority": 1,
+              "value": 3010
+            },
+            {
+              "group": "XIC",
+              "name": "FastXicMaxIonCount",
+              "priority": 1,
+              "value": 3000
+            }
+          ],
+          "type": "Byologic"
+        }
+      ],
+      "columns": [
+        "MS/MS Ids (Byonic)",
+        "Quant (Byologic)"
+      ],
+      "name": "Processing nodes"
+    }
+  ]
+}
