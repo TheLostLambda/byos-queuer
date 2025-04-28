@@ -12,6 +12,7 @@ use serde_json::Value;
 
 use crate::{modifications::Modifications, proteins::Proteins, samples::Samples};
 
+// FIXME: Change this to only track `workflow_path: PathBuf` and `output_directory: PathBuf`
 #[derive(Clone, Debug)]
 pub struct Workflow {
     name: String,
@@ -58,6 +59,7 @@ impl Workflow {
         })
     }
 
+    // FIXME: Merge this up into `Self::new`!
     pub fn write_wflw(&self) -> Result<PathBuf> {
         let wflw_path = self.output_directory.join(&self.name);
         let mut wflw_writer = BufWriter::new(File::create(&wflw_path)?);
@@ -67,6 +69,8 @@ impl Workflow {
 
         Ok(wflw_path)
     }
+
+    // TODO: Add `Self::run()` which builds and runs a Byos command!
 
     fn workflow_name(
         base_workflow: impl AsRef<Path>,
