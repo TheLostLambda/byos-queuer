@@ -59,6 +59,7 @@ impl Workflow {
         protein_file: impl AsRef<Path>,
         modifications_file: Option<impl AsRef<Path>>,
     ) -> Result<String> {
+        // FIXME: Should this really be a macro?
         fn file_part(
             part: impl Fn(&Path) -> Option<&OsStr>,
             path: impl AsRef<Path>,
