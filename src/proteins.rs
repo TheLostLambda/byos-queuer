@@ -2,9 +2,9 @@
 use std::io::{BufRead, BufReader, Read};
 
 // External Crate Imports
-use color_eyre::{eyre::Context, Result};
+use color_eyre::{Result, eyre::Context};
 use seq_io::fasta::{OwnedRecord, Reader, Record};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 // Public API ==========================================================================================================
 
@@ -25,10 +25,11 @@ impl Proteins {
             .collect::<Result<_, _>>()
             .wrap_err("failed to read proteins from TXT file")
     }
+}
 
-    #[must_use]
-    pub fn to_json(&self) -> Value {
-        let proteins = self
+impl From<&Proteins> for Value {
+    fn from(value: &Proteins) -> Self {
+        let proteins = value
             .0
             .iter()
             .enumerate()
@@ -46,7 +47,13 @@ impl Proteins {
             })
             .collect();
 
-        Value::Array(proteins)
+        Self::Array(proteins)
+    }
+}
+
+impl From<Proteins> for Value {
+    fn from(value: Proteins) -> Self {
+        Self::from(&value)
     }
 }
 
@@ -196,7 +203,7 @@ mod tests {
            },
         ]);
 
-        let json = PROTEINS.to_json();
+        let json = Value::from(&*PROTEINS);
 
         assert_eq!(json, expected);
     }

@@ -17,12 +17,19 @@ impl Modifications {
 
         Ok(Self(modifications))
     }
+}
 
-    #[must_use]
-    pub fn to_json(&self) -> Value {
-        let modifications = self.0.clone();
+impl From<&Modifications> for Value {
+    fn from(value: &Modifications) -> Self {
+        let modifications = value.0.clone();
 
-        Value::String(modifications)
+        Self::String(modifications)
+    }
+}
+
+impl From<Modifications> for Value {
+    fn from(value: Modifications) -> Self {
+        Self::from(&value)
     }
 }
 
@@ -64,9 +71,11 @@ mod tests {
 
     #[test]
     fn to_json() {
-        let expected = json!("% Custom modification text below\nHexNAc(1)MurNAc_alditol(1) @ NTerm | common1\nHexN(1) MurNAc_alditol(1) @ NTerm | common1\nHexNAc(1)MurNAc_alditol(1) / -20.0262 @ NTerm | common1\nHexN(1) MurNAc_alditol(1) / -20.0262 @ NTerm | common1\nHexNAc(1)MurNAc_alditol(1) / +42.0106 @ NTerm | common1\n\ncleavage_flags=0\n");
+        let expected = json!(
+            "% Custom modification text below\nHexNAc(1)MurNAc_alditol(1) @ NTerm | common1\nHexN(1) MurNAc_alditol(1) @ NTerm | common1\nHexNAc(1)MurNAc_alditol(1) / -20.0262 @ NTerm | common1\nHexN(1) MurNAc_alditol(1) / -20.0262 @ NTerm | common1\nHexNAc(1)MurNAc_alditol(1) / +42.0106 @ NTerm | common1\n\ncleavage_flags=0\n"
+        );
 
-        let json = MODIFICATIONS.to_json();
+        let json = Value::from(&*MODIFICATIONS);
 
         assert_eq!(json, expected);
     }

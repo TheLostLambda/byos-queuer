@@ -2,17 +2,16 @@
 use std::path::PathBuf;
 
 // External Crate Imports
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 // Public API ==========================================================================================================
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Samples(Vec<Sample>);
 
-impl Samples {
-    #[must_use]
-    pub fn to_json(&self) -> Value {
-        let samples = self
+impl From<&Samples> for Value {
+    fn from(value: &Samples) -> Self {
+        let samples = value
             .0
             .iter()
             .enumerate()
@@ -40,7 +39,13 @@ impl Samples {
             })
             .collect();
 
-        Value::Array(samples)
+        Self::Array(samples)
+    }
+}
+
+impl From<Samples> for Value {
+    fn from(value: Samples) -> Self {
+        Self::from(&value)
     }
 }
 
@@ -136,7 +141,7 @@ mod tests {
             }
         ]);
 
-        let json = SAMPLES.to_json();
+        let json = Value::from(&*SAMPLES);
 
         assert_eq!(json, expected);
     }

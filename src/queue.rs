@@ -1,10 +1,13 @@
 use std::{
-    sync::atomic::AtomicBool,
+    sync::{
+        Arc, RwLock,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
+    thread::{self, JoinHandle, ThreadId},
     time::{Duration, Instant},
 };
 
 use color_eyre::eyre::Result;
-use rayon::{ThreadPool, ThreadPoolBuilder};
 
 use crate::workflow::Workflow;
 
@@ -20,6 +23,48 @@ struct Job {
     status: Status,
 }
 
+// FIXME: Should this be split out into it's own `thread_pool.rs` module?
+// FIXME: Should be called DynamicThreadPool? Because its size changes?
+struct ThreadPool {
+    threads: Arc<AtomicUsize>,
+    max_threads: usize,
+}
+
+impl ThreadPool {
+    fn new(max_threads: usize) -> Self {
+        Self {
+            threads: Arc::new(AtomicUsize::new(0)),
+            max_threads,
+        }
+    }
+
+    fn available_threads(&self) -> usize {
+        self.max_threads - self.threads.load(Ordering::Relaxed)
+    }
+
+    // TODO: write `spawn_all`?
+    fn spawn<T: Send + 'static>(
+        &self,
+        process: impl FnOnce() -> T + Send + 'static,
+    ) -> Option<JoinHandle<T>> {
+        self.threads
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |mut threads| {
+                threads += 1;
+                (threads <= self.max_threads).then_some(threads)
+            })
+            .ok()?;
+
+        let threads = Arc::clone(&self.threads);
+        let handle = thread::spawn(move || {
+            let result = process();
+            threads.fetch_sub(1, Ordering::Relaxed);
+            result
+        });
+
+        Some(handle)
+    }
+}
+
 struct Queue {
     jobs: Vec<Job>,
     thread_pool: ThreadPool,
@@ -31,9 +76,7 @@ struct Queue {
 
 impl Queue {
     fn new(threads: Option<usize>) -> Result<Self> {
-        let thread_pool = ThreadPoolBuilder::new()
-            .num_threads(threads.unwrap_or_default())
-            .build()?;
+        todo!()
     }
 
     // TODO: `Self::queue(Workflow)` that just immediately spawns things into the pool, but also adds them to the list
@@ -49,6 +92,7 @@ impl Queue {
 mod tests {
     use super::*;
 
+    #[ignore]
     #[test]
     fn new() {
         todo!()
