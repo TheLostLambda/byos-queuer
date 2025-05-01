@@ -4,7 +4,6 @@ use std::{
     fs::{self, File},
     io::Seek,
     path::{self, Path, PathBuf},
-    process::Output,
 };
 
 // External Crate Imports
@@ -22,7 +21,7 @@ use crate::{modifications::Modifications, proteins::Proteins, samples::Samples};
 
 pub struct Workflow {
     name: String,
-    launch_command: Box<dyn Fn() -> Result<Output>>,
+    launch_command: Box<dyn Fn() -> Result<()>>,
 }
 
 impl Workflow {
@@ -69,7 +68,7 @@ impl Workflow {
         &self.name
     }
 
-    pub fn run(&self) -> Result<Output> {
+    pub fn run(&self) -> Result<()> {
         (self.launch_command)()
     }
 }
@@ -185,7 +184,7 @@ impl Workflow {
     fn build_command(
         output_directory: impl AsRef<Path> + Copy,
         name: &str,
-    ) -> Result<Box<dyn Fn() -> Result<Output>>> {
+    ) -> Result<Box<dyn Fn() -> Result<()>>> {
         let wflw_path = Self::wflw_path(output_directory, name);
         let output_path = path::absolute(output_directory.as_ref().join(name))?;
         let result_file = output_path.join("Result");
@@ -206,6 +205,7 @@ impl Workflow {
             .stderr_to_stdout()
             .stdout_path(&log_file)
             .run()
+            .map(|_| ())
             .wrap_err_with(|| format!("failed to run workflow {name}"))
         };
 
@@ -237,13 +237,13 @@ mod tests {
     const MODIFICATIONS_FILE: &str = "tests/data/modifications.txt";
     const OUTPUT_DIRECTORY: &str = "tests/data/output";
 
+    const WORKFLOW_NAME: &str = "PG Monomers (WT, 6ldt; proteins.fasta; modifications.txt)";
+
     const WFLW_FILE: &str = formatc!("{OUTPUT_DIRECTORY}/{WORKFLOW_NAME}.wflw");
     const REFERENCE_WFLW_FILE: &str = formatc!("{OUTPUT_DIRECTORY}/Reference {WORKFLOW_NAME}.wflw");
     const RESULT_DIRECTORY: &str = formatc!("{OUTPUT_DIRECTORY}/{WORKFLOW_NAME}");
     const RESULT_FILE: &str = formatc!("{RESULT_DIRECTORY}/Result");
     const LOG_FILE: &str = formatc!("{RESULT_DIRECTORY}/log.txt");
-
-    const WORKFLOW_NAME: &str = "PG Monomers (WT, 6ldt; proteins.fasta; modifications.txt)";
 
     // TODO: To get these tests working on Windows, I think I'll need to create `scripts/windows` and `scripts/unix`
     // directories and use conditional compilation to set `TEST_SCRIPTS` accordingly!
