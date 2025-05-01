@@ -7,4 +7,5 @@ pub mod modifications;
 pub mod proteins;
 pub mod queue;
 pub mod samples;
+pub mod worker_pool;
 pub mod workflow;
