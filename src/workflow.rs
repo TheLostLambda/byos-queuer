@@ -4,11 +4,15 @@ use std::{
     fs::{self, File},
     io::Seek,
     path::{self, Path, PathBuf},
-    process::Command,
+    process::Output,
 };
 
 // External Crate Imports
-use color_eyre::{Result, eyre::eyre};
+use color_eyre::{
+    Result,
+    eyre::{Context, eyre},
+};
+use duct::cmd;
 use serde_json::Value;
 
 // Local Crate Imports
@@ -16,10 +20,9 @@ use crate::{modifications::Modifications, proteins::Proteins, samples::Samples};
 
 // Public API ==========================================================================================================
 
-#[derive(Debug)]
 pub struct Workflow {
     name: String,
-    launch_command: Command,
+    launch_command: Box<dyn Fn() -> Result<Output>>,
 }
 
 impl Workflow {
@@ -66,9 +69,8 @@ impl Workflow {
         &self.name
     }
 
-    #[must_use]
-    pub const fn launch_command(&mut self) -> &mut Command {
-        &mut self.launch_command
+    pub fn run(&self) -> Result<Output> {
+        (self.launch_command)()
     }
 }
 
@@ -180,19 +182,34 @@ impl Workflow {
         Ok(())
     }
 
-    fn build_command(output_directory: impl AsRef<Path> + Copy, name: &str) -> Result<Command> {
+    fn build_command(
+        output_directory: impl AsRef<Path> + Copy,
+        name: &str,
+    ) -> Result<Box<dyn Fn() -> Result<Output>>> {
         let wflw_path = Self::wflw_path(output_directory, name);
-        let output_path = path::absolute(output_directory.as_ref().join(name).join("Result"))?;
+        let output_path = path::absolute(output_directory.as_ref().join(name))?;
+        let result_file = output_path.join("Result");
+        let log_file = output_path.join("log.txt");
 
-        let mut launch_command = Command::new(Self::BYOS_EXE);
-        launch_command
-            .arg("--mode=create-project")
-            .arg("--input")
-            .arg(wflw_path)
-            .arg("--output")
-            .arg(output_path);
+        let name = name.to_owned();
+        let launch_command = move || {
+            fs::create_dir(&output_path)?;
 
-        Ok(launch_command)
+            cmd!(
+                Self::BYOS_EXE,
+                "--mode=create-project",
+                "--input",
+                &wflw_path,
+                "--output",
+                &result_file
+            )
+            .stderr_to_stdout()
+            .stdout_path(&log_file)
+            .run()
+            .wrap_err_with(|| format!("failed to run workflow {name}"))
+        };
+
+        Ok(Box::new(launch_command))
     }
 
     fn wflw_path(output_directory: impl AsRef<Path>, name: &str) -> PathBuf {
@@ -206,6 +223,8 @@ impl Workflow {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+
     use const_format::formatc;
     use serde_json::json;
 
@@ -220,21 +239,44 @@ mod tests {
 
     const WFLW_FILE: &str = formatc!("{OUTPUT_DIRECTORY}/{WORKFLOW_NAME}.wflw");
     const REFERENCE_WFLW_FILE: &str = formatc!("{OUTPUT_DIRECTORY}/Reference {WORKFLOW_NAME}.wflw");
-    const RESULT_FILE: &str = formatc!("{OUTPUT_DIRECTORY}/{WORKFLOW_NAME}/Result");
+    const RESULT_DIRECTORY: &str = formatc!("{OUTPUT_DIRECTORY}/{WORKFLOW_NAME}");
+    const RESULT_FILE: &str = formatc!("{RESULT_DIRECTORY}/Result");
+    const LOG_FILE: &str = formatc!("{RESULT_DIRECTORY}/log.txt");
 
     const WORKFLOW_NAME: &str = "PG Monomers (WT, 6ldt; proteins.fasta; modifications.txt)";
+
+    // TODO: To get these tests working on Windows, I think I'll need to create `scripts/windows` and `scripts/unix`
+    // directories and use conditional compilation to set `TEST_SCRIPTS` accordingly!
+    const TEST_SCRIPTS: &str = "tests/scripts";
 
     fn load_wflw_json(path: impl AsRef<Path>) -> Value {
         serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
     }
 
+    unsafe fn with_test_path<T>(test_code: impl FnOnce() -> T) -> T {
+        let old_path = env::var("PATH").unwrap_or_default();
+        let test_scripts = path::absolute(TEST_SCRIPTS).unwrap();
+
+        unsafe {
+            env::set_var("PATH", test_scripts);
+        }
+
+        let result = test_code();
+
+        unsafe {
+            env::set_var("PATH", old_path);
+        }
+
+        result
+    }
+
     #[test]
-    fn new() {
+    fn new_then_run() {
         // Test that .wflw file is created and matches reference output
         let _ = fs::remove_file(WFLW_FILE);
         assert!(!Path::new(WFLW_FILE).exists());
 
-        let mut workflow = Workflow::new(
+        let workflow = Workflow::new(
             BASE_WORKFLOW,
             SAMPLE_FILES,
             PROTEIN_FASTA_FILE,
@@ -253,21 +295,32 @@ mod tests {
         fs::remove_file(WFLW_FILE).unwrap();
 
         // Test that the returned `Workflow` has the correct `name` and `launch_command`
-        let expected_result_file = path::absolute(RESULT_FILE).unwrap();
-        let expected_args = vec![
-            "--mode=create-project",
-            "--input",
-            dbg!(WFLW_FILE),
-            "--output",
-            expected_result_file.to_str().unwrap(),
-        ];
-
         assert_eq!(workflow.name(), WORKFLOW_NAME);
-        assert_eq!(workflow.launch_command().get_program(), Workflow::BYOS_EXE);
-        assert_eq!(
-            workflow.launch_command().get_args().collect::<Vec<_>>(),
-            expected_args
-        );
+
+        let _ = fs::remove_dir_all(RESULT_DIRECTORY);
+        assert!(!Path::new(RESULT_DIRECTORY).exists());
+
+        // SAFETY: It's unsafe for multiple threads to call `env::set_var()`, but given I'm only calling things in this
+        // single test (currently), it should be alright... Honestly, even if it does result in unsafe behaviour, these
+        // are just tests, so I don't reckon it can do too much damage...
+        let output = unsafe { with_test_path(|| workflow.run()) };
+        assert!(output.is_ok());
+
+        let merged_output = fs::read_to_string(LOG_FILE).unwrap();
+        let mut lines = merged_output.lines();
+
+        let executable_path = Path::new(lines.next().unwrap());
+        assert!(executable_path.is_absolute());
+        assert!(executable_path.ends_with(Workflow::BYOS_EXE));
+        assert_eq!(lines.next(), Some("--mode=create-project"));
+        assert_eq!(lines.next(), Some("--input"));
+        assert_eq!(lines.next(), Some(WFLW_FILE));
+        assert_eq!(lines.next(), Some("--output"));
+        let result_file = Path::new(lines.next().unwrap());
+        assert!(result_file.is_absolute());
+        assert!(result_file.ends_with(RESULT_FILE));
+
+        fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
     }
 
     #[test]
