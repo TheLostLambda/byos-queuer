@@ -186,13 +186,15 @@ impl Workflow {
         name: &str,
     ) -> Result<Box<dyn Fn() -> Result<()>>> {
         let wflw_path = Self::wflw_path(output_directory, name);
-        let output_path = path::absolute(output_directory.as_ref().join(name))?;
-        let result_file = output_path.join("Result");
-        let log_file = output_path.join("log.txt");
+        let result_path = path::absolute(output_directory.as_ref().join(name))?;
+        let result_file = result_path.join("Result");
+        let log_file = result_path.join("log.txt");
 
         let name = name.to_owned();
         let launch_command = move || {
-            fs::create_dir(&output_path)?;
+            if !result_path.exists() {
+                fs::create_dir(&result_path)?;
+            }
 
             cmd!(
                 Self::BYOS_EXE,
@@ -319,6 +321,10 @@ mod tests {
         let result_file = Path::new(lines.next().unwrap());
         assert!(result_file.is_absolute());
         assert!(result_file.ends_with(RESULT_FILE));
+
+        // Make sure that `Workflow`s can be re-run without panicking
+        let output = unsafe { with_test_path(|| workflow.run()) };
+        assert!(output.is_ok());
 
         fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
     }
