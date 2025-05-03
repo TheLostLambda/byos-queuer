@@ -11,7 +11,7 @@ use color_eyre::{
     Result,
     eyre::{Context, eyre},
 };
-use duct::cmd;
+use duct::{Handle, cmd};
 use serde_json::Value;
 
 // Local Crate Imports
@@ -21,7 +21,7 @@ use crate::{modifications::Modifications, proteins::Proteins, samples::Samples};
 
 pub struct Workflow {
     name: String,
-    launch_command: Box<dyn Fn() -> Result<()>>,
+    launch_command: Box<dyn Fn() -> Result<Handle>>,
 }
 
 impl Workflow {
@@ -68,7 +68,7 @@ impl Workflow {
         &self.name
     }
 
-    pub fn run(&self) -> Result<()> {
+    pub fn start(&self) -> Result<Handle> {
         (self.launch_command)()
     }
 }
@@ -184,7 +184,7 @@ impl Workflow {
     fn build_command(
         output_directory: impl AsRef<Path> + Copy,
         name: &str,
-    ) -> Result<Box<dyn Fn() -> Result<()>>> {
+    ) -> Result<Box<dyn Fn() -> Result<Handle>>> {
         let wflw_path = Self::wflw_path(output_directory, name);
         let result_path = path::absolute(output_directory.as_ref().join(name))?;
         let result_file = result_path.join("Result");
@@ -206,8 +206,7 @@ impl Workflow {
             )
             .stderr_to_stdout()
             .stdout_path(&log_file)
-            .run()
-            .map(|_| ())
+            .start()
             .wrap_err_with(|| format!("failed to run workflow {name}"))
         };
 
@@ -305,7 +304,8 @@ mod tests {
         // SAFETY: It's unsafe for multiple threads to call `env::set_var()`, but given I'm only calling things in this
         // single test (currently), it should be alright... Honestly, even if it does result in unsafe behaviour, these
         // are just tests, so I don't reckon it can do too much damage...
-        let output = unsafe { with_test_path(|| workflow.run()) };
+        let handle = unsafe { with_test_path(|| workflow.start()) }.unwrap();
+        let output = handle.wait();
         assert!(output.is_ok());
 
         let merged_output = fs::read_to_string(LOG_FILE).unwrap();
@@ -323,7 +323,8 @@ mod tests {
         assert!(result_file.ends_with(RESULT_FILE));
 
         // Make sure that `Workflow`s can be re-run without panicking
-        let output = unsafe { with_test_path(|| workflow.run()) };
+        let handle = unsafe { with_test_path(|| workflow.start()) }.unwrap();
+        let output = handle.wait();
         assert!(output.is_ok());
 
         fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
