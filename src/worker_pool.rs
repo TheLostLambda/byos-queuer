@@ -72,12 +72,12 @@ impl WorkerPool {
 // Unit Tests ==========================================================================================================
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::time::Duration;
 
     use super::*;
 
-    fn sleep_ms(millis: u64) {
+    pub fn sleep_ms(millis: u64) {
         thread::sleep(Duration::from_millis(millis));
     }
 

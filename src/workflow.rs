@@ -223,7 +223,7 @@ impl Workflow {
 // Unit Tests ==========================================================================================================
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::env;
 
     use const_format::formatc;
@@ -231,35 +231,28 @@ mod tests {
 
     use super::*;
 
-    const BASE_WORKFLOW: &str = "tests/data/PG Monomers.wflw";
-    const SAMPLE_FILES: [&str; 2] = ["tests/data/WT.raw", "tests/data/6ldt.raw"];
-    const PROTEIN_FASTA_FILE: &str = "tests/data/proteins.fasta";
-    const PROTEIN_TXT_FILE: &str = "tests/data/proteins.txt";
-    const MODIFICATIONS_FILE: &str = "tests/data/modifications.txt";
-    const OUTPUT_DIRECTORY: &str = "tests/data/output";
+    pub const BASE_WORKFLOW: &str = "tests/data/PG Monomers.wflw";
+    pub const SAMPLE_FILES: [&str; 2] = ["tests/data/WT.raw", "tests/data/6ldt.raw"];
+    pub const PROTEIN_FASTA_FILE: &str = "tests/data/proteins.fasta";
+    pub const MODIFICATIONS_FILE: &str = "tests/data/modifications.txt";
+    pub const OUTPUT_DIRECTORY: &str = "tests/data/output";
 
-    const WORKFLOW_NAME: &str = "PG Monomers (WT, 6ldt; proteins.fasta; modifications.txt)";
+    pub const WFLW_FILE: &str = formatc!("{OUTPUT_DIRECTORY}/{WORKFLOW_NAME}.wflw");
+    pub const RESULT_DIRECTORY: &str = formatc!("{OUTPUT_DIRECTORY}/{WORKFLOW_NAME}");
 
-    const WFLW_FILE: &str = formatc!("{OUTPUT_DIRECTORY}/{WORKFLOW_NAME}.wflw");
-    const REFERENCE_WFLW_FILE: &str = formatc!("{OUTPUT_DIRECTORY}/Reference {WORKFLOW_NAME}.wflw");
-    const RESULT_DIRECTORY: &str = formatc!("{OUTPUT_DIRECTORY}/{WORKFLOW_NAME}");
-    const RESULT_FILE: &str = formatc!("{RESULT_DIRECTORY}/Result");
-    const LOG_FILE: &str = formatc!("{RESULT_DIRECTORY}/log.txt");
+    pub unsafe fn with_test_path<T>(path: impl AsRef<Path>, test_code: impl FnOnce() -> T) -> T {
+        // TODO: Use `cfg` to change this to `;` on Windows!
+        const PATH_SEPARATOR: &str = ":";
 
-    // TODO: To get these tests working on Windows, I think I'll need to create `scripts/windows` and `scripts/unix`
-    // directories and use conditional compilation to set `TEST_SCRIPTS` accordingly!
-    const TEST_PATH: &str = "tests/scripts/workflow";
-
-    fn load_wflw_json(path: impl AsRef<Path>) -> Value {
-        serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
-    }
-
-    unsafe fn with_test_path<T>(path: impl AsRef<Path>, test_code: impl FnOnce() -> T) -> T {
         let old_path = env::var("PATH").unwrap_or_default();
         let new_path = path::absolute(path).unwrap();
+        let joined_path = format!(
+            "{new_path}{PATH_SEPARATOR}{old_path}",
+            new_path = new_path.display()
+        );
 
         unsafe {
-            env::set_var("PATH", new_path);
+            env::set_var("PATH", joined_path);
         }
 
         let result = test_code();
@@ -269,6 +262,22 @@ mod tests {
         }
 
         result
+    }
+
+    const PROTEIN_TXT_FILE: &str = "tests/data/proteins.txt";
+
+    const WORKFLOW_NAME: &str = "PG Monomers (WT, 6ldt; proteins.fasta; modifications.txt)";
+    const REFERENCE_WFLW_FILE: &str = formatc!("{OUTPUT_DIRECTORY}/Reference {WORKFLOW_NAME}.wflw");
+
+    const RESULT_FILE: &str = formatc!("{RESULT_DIRECTORY}/Result");
+    const LOG_FILE: &str = formatc!("{RESULT_DIRECTORY}/log.txt");
+
+    // TODO: To get these tests working on Windows, I think I'll need to create `scripts/windows` and `scripts/unix`
+    // directories and use conditional compilation to set `TEST_SCRIPTS` accordingly!
+    const TEST_PATH: &str = "tests/scripts/workflow";
+
+    fn load_wflw_json(path: impl AsRef<Path>) -> Value {
+        serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
     }
 
     #[test]
