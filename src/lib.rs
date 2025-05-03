@@ -3,6 +3,7 @@
 // 4) Basic (minimally functional) UI for configuring `State`
 // 5) Polish of UI + Skeleton (if time allows!)
 
+pub mod job;
 pub mod modifications;
 pub mod proteins;
 pub mod queue;

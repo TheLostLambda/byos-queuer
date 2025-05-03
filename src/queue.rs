@@ -1,26 +1,11 @@
-use std::{
-    sync::Mutex,
-    time::{Duration, Instant},
-};
+use std::sync::{Arc, Mutex};
 
 use color_eyre::eyre::Result;
 
-use crate::{worker_pool::WorkerPool, workflow::Workflow};
-
-enum Status {
-    Queued,
-    Running(Instant),
-    Completed(Duration),
-    Failed(Duration),
-}
-
-struct Job {
-    workflow: Workflow,
-    status: Status,
-}
+use crate::{job::Job, worker_pool::WorkerPool};
 
 pub struct Queue {
-    jobs: Mutex<Vec<Job>>,
+    jobs: Mutex<Vec<Arc<Job>>>,
     worker_pool: WorkerPool,
 }
 

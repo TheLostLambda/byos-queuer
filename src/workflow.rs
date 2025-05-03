@@ -21,7 +21,7 @@ use crate::{modifications::Modifications, proteins::Proteins, samples::Samples};
 
 pub struct Workflow {
     name: String,
-    launch_command: Box<dyn Fn() -> Result<Handle>>,
+    launch_command: Box<dyn Fn() -> Result<Handle> + Send + Sync>,
 }
 
 impl Workflow {
@@ -184,7 +184,7 @@ impl Workflow {
     fn build_command(
         output_directory: impl AsRef<Path> + Copy,
         name: &str,
-    ) -> Result<Box<dyn Fn() -> Result<Handle>>> {
+    ) -> Result<Box<dyn Fn() -> Result<Handle> + Send + Sync>> {
         let wflw_path = Self::wflw_path(output_directory, name);
         let result_path = path::absolute(output_directory.as_ref().join(name))?;
         let result_file = result_path.join("Result");
@@ -228,6 +228,7 @@ pub(crate) mod tests {
 
     use const_format::formatc;
     use serde_json::json;
+    use serial_test::serial;
 
     use super::*;
 
@@ -281,6 +282,7 @@ pub(crate) mod tests {
     }
 
     #[test]
+    #[serial]
     fn new_then_run() {
         // Test that .wflw file is created and matches reference output
         let _ = fs::remove_file(WFLW_FILE);
@@ -310,9 +312,9 @@ pub(crate) mod tests {
         let _ = fs::remove_dir_all(RESULT_DIRECTORY);
         assert!(!Path::new(RESULT_DIRECTORY).exists());
 
-        // SAFETY: It's unsafe for multiple threads to call `env::set_var()`, but given I'm only calling things in this
-        // single test (currently), it should be alright... Honestly, even if it does result in unsafe behaviour, these
-        // are just tests, so I don't reckon it can do too much damage...
+        // SAFETY: It's unsafe for multiple threads to call `env::set_var()`, but given I'm only calling
+        // `with_test_path()` in tests marked `#[serial]`, it should be alright... Honestly, even if it does result in
+        // unsafe behaviour, these are just tests, so I don't reckon it can do too much damage...
         let handle = unsafe { with_test_path(TEST_PATH, || workflow.start()) }.unwrap();
         let output = handle.wait();
         assert!(output.is_ok());

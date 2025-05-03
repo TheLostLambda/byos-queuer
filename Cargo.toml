@@ -35,3 +35,4 @@ inherits = "dev"
 [dev-dependencies]
 const_format = { version = "0.2.34", features = ["fmt"] }
 indoc = "2.0.6"
+serial_test = { version = "3.2.0", default-features = false }
