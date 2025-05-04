@@ -248,18 +248,18 @@ mod tests {
 
     // TODO: To get these tests working on Windows, I think I'll need to create `scripts/windows` and `scripts/unix`
     // directories and use conditional compilation to set `TEST_SCRIPTS` accordingly!
-    const TEST_SCRIPTS: &str = "tests/scripts";
+    const TEST_PATH: &str = "tests/scripts/workflow";
 
     fn load_wflw_json(path: impl AsRef<Path>) -> Value {
         serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
     }
 
-    unsafe fn with_test_path<T>(test_code: impl FnOnce() -> T) -> T {
+    unsafe fn with_test_path<T>(path: impl AsRef<Path>, test_code: impl FnOnce() -> T) -> T {
         let old_path = env::var("PATH").unwrap_or_default();
-        let test_scripts = path::absolute(TEST_SCRIPTS).unwrap();
+        let new_path = path::absolute(path).unwrap();
 
         unsafe {
-            env::set_var("PATH", test_scripts);
+            env::set_var("PATH", new_path);
         }
 
         let result = test_code();
@@ -304,7 +304,7 @@ mod tests {
         // SAFETY: It's unsafe for multiple threads to call `env::set_var()`, but given I'm only calling things in this
         // single test (currently), it should be alright... Honestly, even if it does result in unsafe behaviour, these
         // are just tests, so I don't reckon it can do too much damage...
-        let handle = unsafe { with_test_path(|| workflow.start()) }.unwrap();
+        let handle = unsafe { with_test_path(TEST_PATH, || workflow.start()) }.unwrap();
         let output = handle.wait();
         assert!(output.is_ok());
 
@@ -323,7 +323,7 @@ mod tests {
         assert!(result_file.ends_with(RESULT_FILE));
 
         // Make sure that `Workflow`s can be re-run without panicking
-        let handle = unsafe { with_test_path(|| workflow.start()) }.unwrap();
+        let handle = unsafe { with_test_path(TEST_PATH, || workflow.start()) }.unwrap();
         let output = handle.wait();
         assert!(output.is_ok());
 
