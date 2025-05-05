@@ -1,0 +1,16 @@
+#!/bin/sh
+
+case $3 in
+  *"WT, 6ldt;"* )
+    sleep 0.04
+    exit 0
+  ;;
+  *"WT;"* )
+    sleep 0.04
+    exit 1
+  ;;
+  *"6ldt;"* )
+    sleep 0.07
+    exit 0
+  ;;
+esac
