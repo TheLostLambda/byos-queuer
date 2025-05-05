@@ -239,8 +239,8 @@ pub(crate) mod tests {
     pub const OUTPUT_DIRECTORY: &str = "tests/data/output";
 
     pub const WORKFLOW_NAME: &str = "PG Monomers (WT, 6ldt; proteins.fasta; modifications.txt)";
-    pub const WFLW_FILE: &str = formatc!("{OUTPUT_DIRECTORY}/{WORKFLOW_NAME}.wflw");
     pub const RESULT_DIRECTORY: &str = formatc!("{OUTPUT_DIRECTORY}/{WORKFLOW_NAME}");
+    pub const WFLW_FILE: &str = formatc!("{RESULT_DIRECTORY}.wflw");
 
     pub unsafe fn with_test_path<T>(path: impl AsRef<Path>, test_code: impl FnOnce() -> T) -> T {
         // TODO: Use `cfg` to change this to `;` on Windows!

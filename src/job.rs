@@ -95,6 +95,8 @@ mod tests {
 
     use super::*;
 
+    // TODO: On Windows, use `formatc!()` here to change the prefix between `tests/scripts/windows` and
+    // `tests/scripts/unix` at compile time
     const COMPLETES_PATH: &str = "tests/scripts/job-completes";
     const FAILS_PATH: &str = "tests/scripts/job-fails";
 
