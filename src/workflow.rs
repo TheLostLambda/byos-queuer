@@ -238,6 +238,7 @@ pub(crate) mod tests {
     pub const MODIFICATIONS_FILE: &str = "tests/data/modifications.txt";
     pub const OUTPUT_DIRECTORY: &str = "tests/data/output";
 
+    pub const WORKFLOW_NAME: &str = "PG Monomers (WT, 6ldt; proteins.fasta; modifications.txt)";
     pub const WFLW_FILE: &str = formatc!("{OUTPUT_DIRECTORY}/{WORKFLOW_NAME}.wflw");
     pub const RESULT_DIRECTORY: &str = formatc!("{OUTPUT_DIRECTORY}/{WORKFLOW_NAME}");
 
@@ -267,7 +268,6 @@ pub(crate) mod tests {
 
     const PROTEIN_TXT_FILE: &str = "tests/data/proteins.txt";
 
-    const WORKFLOW_NAME: &str = "PG Monomers (WT, 6ldt; proteins.fasta; modifications.txt)";
     const REFERENCE_WFLW_FILE: &str = formatc!("{OUTPUT_DIRECTORY}/Reference {WORKFLOW_NAME}.wflw");
 
     const RESULT_FILE: &str = formatc!("{RESULT_DIRECTORY}/Result");

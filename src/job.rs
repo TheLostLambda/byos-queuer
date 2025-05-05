@@ -37,6 +37,10 @@ impl Job {
         Self { workflow, status }
     }
 
+    pub fn name(&self) -> &str {
+        self.workflow.name()
+    }
+
     #[must_use]
     #[allow(clippy::missing_panics_doc)]
     pub fn status(&self) -> Status {
