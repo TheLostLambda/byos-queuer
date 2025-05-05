@@ -42,12 +42,10 @@ impl Job {
     }
 
     #[must_use]
-    #[allow(clippy::missing_panics_doc)]
     pub fn status(&self) -> Status {
         self.status.lock().unwrap().clone()
     }
 
-    #[allow(clippy::missing_panics_doc)]
     pub fn reset(&self) -> Result<()> {
         if let Status::Running(handle, _) = self.status() {
             handle.kill()?;
@@ -58,7 +56,6 @@ impl Job {
         Ok(())
     }
 
-    #[allow(clippy::missing_panics_doc)]
     pub fn run(&self) -> Result<()> {
         match self.status() {
             Status::Queued => {
