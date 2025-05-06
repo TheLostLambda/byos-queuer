@@ -122,6 +122,13 @@ impl Queue {
 
         self.jobs.lock().unwrap().push(Arc::new(Job::new(workflow)));
 
+        if self.running() {
+            // NOTE: `WorkerPool.spawn()` will check if there is room in the pool for another worker, if there isn't,
+            // then it will return an `Err`. We don't actually mind this outcome, so just discard the `Result` with a
+            // `let _ = ...` binding.
+            let _ = self.spawn_workers(1);
+        }
+
         Ok(())
     }
 
@@ -136,13 +143,7 @@ impl Queue {
         let available_workers = self.worker_pool.available_workers();
         let new_workers = cmp::min(queued_jobs, available_workers);
 
-        let jobs = Arc::clone(&self.jobs);
-        let stagger_duration = self.stagger_duration;
-        let last_job_run_at = Arc::clone(&self.last_job_run_at);
-
-        self.worker_pool.spawn(new_workers, move || {
-            Self::worker(&jobs, stagger_duration, &last_job_run_at);
-        })
+        self.spawn_workers(new_workers)
     }
 }
 
@@ -151,9 +152,20 @@ impl Queue {
 type Jobs = Arc<Mutex<Vec<Arc<Job>>>>;
 type SyncInstant = Arc<Mutex<Instant>>;
 
+// FIXME: Reorder methods into something sensible!
 impl Queue {
     fn running(&self) -> bool {
         self.worker_pool.running()
+    }
+
+    fn spawn_workers(&self, new_workers: usize) -> Result<usize> {
+        let jobs = Arc::clone(&self.jobs);
+        let stagger_duration = self.stagger_duration;
+        let last_job_run_at = Arc::clone(&self.last_job_run_at);
+
+        self.worker_pool.spawn(new_workers, move || {
+            Self::worker(&jobs, stagger_duration, &last_job_run_at);
+        })
     }
 
     fn next_job(jobs: &Jobs) -> Option<Arc<Job>> {
@@ -221,7 +233,17 @@ mod tests {
     const WT_WFLW_FILE: &str = formatc!("{WT_RESULT_DIRECTORY}.wflw");
     const LDT_WFLW_FILE: &str = formatc!("{LDT_RESULT_DIRECTORY}.wflw");
 
-    const TEST_PATH: &str = "tests/scripts/queue";
+    const FAST_PATH: &str = "tests/scripts/queue-fast";
+    const SLOW_PATH: &str = "tests/scripts/queue-slow";
+
+    fn job_statuses(queue: &Queue) -> Vec<Status> {
+        queue.jobs().into_iter().map(|(_, status)| status).collect()
+    }
+
+    fn sleep_until_elapsed_ms(instant: Instant, millis: u64) {
+        let target = Duration::from_millis(millis);
+        Queue::sleep_until_elapsed(instant, target);
+    }
 
     #[test]
     #[serial]
@@ -318,13 +340,6 @@ mod tests {
         assert!(all_jobs_are_queued);
 
         // Then, make sure they run staggered and in parallel!
-        let job_statuses = || {
-            queue
-                .jobs()
-                .into_iter()
-                .map(|(_, status)| status)
-                .collect::<Vec<_>>()
-        };
         let test_code = || {
             queue.run().unwrap();
 
@@ -333,21 +348,21 @@ mod tests {
             sleep_ms(5);
 
             assert!(matches!(
-                &job_statuses()[..],
+                &job_statuses(&queue)[..],
                 [Status::Running(..), Status::Queued, Status::Queued]
             ));
 
             sleep_ms(15);
 
             assert!(matches!(
-                &job_statuses()[..],
+                &job_statuses(&queue)[..],
                 [Status::Running(..), Status::Running(..), Status::Queued]
             ));
 
             sleep_ms(15);
 
             assert!(matches!(
-                &job_statuses()[..],
+                &job_statuses(&queue)[..],
                 [
                     Status::Running(..),
                     Status::Running(..),
@@ -358,14 +373,14 @@ mod tests {
             sleep_ms(20);
 
             assert!(matches!(
-                &job_statuses()[..],
+                &job_statuses(&queue)[..],
                 [Status::Failed(..), Status::Running(..), Status::Running(..)]
             ));
 
             sleep_ms(20);
 
             assert!(matches!(
-                &job_statuses()[..],
+                &job_statuses(&queue)[..],
                 [
                     Status::Failed(..),
                     Status::Running(..),
@@ -376,7 +391,7 @@ mod tests {
             sleep_ms(20);
 
             assert!(matches!(
-                &job_statuses()[..],
+                &job_statuses(&queue)[..],
                 [
                     Status::Failed(..),
                     Status::Completed(..),
@@ -387,17 +402,110 @@ mod tests {
             assert!(!queue.running());
         };
 
-        unsafe { with_test_path(TEST_PATH, test_code) }
+        unsafe { with_test_path(FAST_PATH, test_code) }
 
         fs::remove_dir_all(WT_RESULT_DIRECTORY).unwrap();
         fs::remove_dir_all(LDT_RESULT_DIRECTORY).unwrap();
         fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
     }
 
-    #[ignore]
     #[test]
     #[serial]
-    fn run_checking_worker_count() {
-        todo!()
+    fn run_checking_addition_to_running_queue() {
+        // First, queue an initial `Job`
+        let queue = Queue::new(2, Duration::from_millis(100)).unwrap();
+
+        queue
+            .queue_grouped(
+                BASE_WORKFLOW,
+                SAMPLE_FILES,
+                PROTEIN_FASTA_FILE,
+                Some(MODIFICATIONS_FILE),
+                OUTPUT_DIRECTORY,
+            )
+            .unwrap();
+
+        fs::remove_file(WFLW_FILE).unwrap();
+
+        assert!(!queue.running());
+        assert_eq!(queue.worker_pool.available_workers(), 2);
+        assert!(matches!(&job_statuses(&queue)[..], [Status::Queued]));
+
+        // Then, run the queue and add some more `Job`s whilst it's running!
+        let test_code = || {
+            queue.run().unwrap();
+
+            assert!(queue.running());
+
+            sleep_ms(5);
+
+            assert_eq!(queue.worker_pool.available_workers(), 1);
+            assert!(matches!(&job_statuses(&queue)[..], [Status::Running(..)]));
+
+            let instant = Instant::now();
+            queue
+                .queue(
+                    BASE_WORKFLOW,
+                    SAMPLE_FILES,
+                    PROTEIN_FASTA_FILE,
+                    Some(MODIFICATIONS_FILE),
+                    OUTPUT_DIRECTORY,
+                )
+                .unwrap();
+
+            fs::remove_file(WT_WFLW_FILE).unwrap();
+            fs::remove_file(LDT_WFLW_FILE).unwrap();
+
+            sleep_until_elapsed_ms(instant, 230);
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert!(matches!(
+                &job_statuses(&queue)[..],
+                [Status::Running(..), Status::Running(..), Status::Queued]
+            ));
+
+            sleep_ms(40);
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert!(matches!(
+                &job_statuses(&queue)[..],
+                [
+                    Status::Completed(..),
+                    Status::Running(..),
+                    Status::Running(..)
+                ]
+            ));
+
+            sleep_ms(180);
+
+            assert_eq!(queue.worker_pool.available_workers(), 1);
+            assert!(matches!(
+                &job_statuses(&queue)[..],
+                [
+                    Status::Completed(..),
+                    Status::Completed(..),
+                    Status::Running(..)
+                ]
+            ));
+
+            sleep_ms(40);
+
+            assert!(!queue.running());
+            assert_eq!(queue.worker_pool.available_workers(), 2);
+            assert!(matches!(
+                &job_statuses(&queue)[..],
+                [
+                    Status::Completed(..),
+                    Status::Completed(..),
+                    Status::Completed(..)
+                ]
+            ));
+        };
+
+        unsafe { with_test_path(SLOW_PATH, test_code) }
+
+        fs::remove_dir_all(WT_RESULT_DIRECTORY).unwrap();
+        fs::remove_dir_all(LDT_RESULT_DIRECTORY).unwrap();
+        fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
     }
 }
