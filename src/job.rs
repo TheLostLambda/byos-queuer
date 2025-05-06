@@ -57,15 +57,18 @@ impl Job {
     }
 
     pub fn run(&self) -> Result<()> {
+        self.start()?;
+        self.wait();
+
+        Ok(())
+    }
+
+    pub fn start(&self) -> Result<()> {
         match self.status() {
             Status::Queued => {
                 let instant = Instant::now();
                 let handle = Arc::new(self.workflow.start()?);
                 *self.status.lock().unwrap() = Status::Running(Arc::clone(&handle), instant);
-                *self.status.lock().unwrap() = match handle.wait() {
-                    Ok(_) => Status::Completed(instant.elapsed()),
-                    Err(error) => Status::Failed(Arc::new(error.into()), instant.elapsed()),
-                };
 
                 Ok(())
             }
@@ -73,6 +76,15 @@ impl Job {
             Status::Completed(..) | Status::Failed(..) => Err(eyre!(
                 "the `Job` has already been run — if you'd like to re-run it, first reset its status with `Job.reset()`"
             )),
+        }
+    }
+
+    pub fn wait(&self) {
+        if let Status::Running(handle, instant) = self.status() {
+            *self.status.lock().unwrap() = match handle.wait() {
+                Ok(_) => Status::Completed(instant.elapsed()),
+                Err(error) => Status::Failed(Arc::new(error.into()), instant.elapsed()),
+            };
         }
     }
 }
