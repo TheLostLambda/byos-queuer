@@ -46,7 +46,6 @@ impl Queue {
         })
     }
 
-    // FIXME: Needs testing!
     pub fn set_workers(&mut self, workers: usize) -> Result<()> {
         if self.running() {
             return Err(eyre!("the `Queue` must be stopped to `set_workers()`"));
@@ -57,7 +56,6 @@ impl Queue {
         Ok(())
     }
 
-    // FIXME: Needs testing!
     pub fn set_stagger_duration(&mut self, stagger_duration: Duration) -> Result<()> {
         if self.running() {
             return Err(eyre!(
@@ -177,6 +175,8 @@ impl Queue {
     }
 
     fn worker(jobs: &Jobs, stagger_duration: Duration, last_job_run_at: &SyncInstant) {
+        // NOTE: Keep an eye on https://github.com/rust-lang/rust-clippy/issues/12128, this is a false positive!
+        #[allow(clippy::significant_drop_tightening)]
         let next_job_staggered = || {
             let mut last_job_run_at = last_job_run_at.lock().unwrap();
 
@@ -187,13 +187,19 @@ impl Queue {
             let next_job = Self::next_job(jobs);
             *last_job_run_at = Instant::now();
 
-            next_job
+            next_job.map(|job| (job, last_job_run_at))
         };
 
-        while let Some(job) = next_job_staggered() {
+        while let Some((job, lock)) = next_job_staggered() {
             // SAFETY: The call to `next_job_staggered()` should only ever return `Status::Queued` `Job`s, so
             // `Job.run()` shouldn't ever fail!
-            job.run().unwrap();
+            job.start().unwrap();
+            // NOTE: Dropping this lock here finally allows other threads to grab another `Job` — it's important this
+            // lock is dropped *after* `job.start()` is called, since `job.start()` is what sets the `Job` status to
+            // `Running`. If this lock is dropped any earlier, then it's possible for several threads to start on the
+            // same `Job`, since the `Job` status will still be `Queued`!
+            drop(lock);
+            job.wait();
         }
     }
 
@@ -507,5 +513,172 @@ mod tests {
         fs::remove_dir_all(WT_RESULT_DIRECTORY).unwrap();
         fs::remove_dir_all(LDT_RESULT_DIRECTORY).unwrap();
         fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
+    }
+
+    #[test]
+    #[serial]
+    fn reconfigure_when_stopped() {
+        // First, queue an initial couple of `Job`s
+        let mut queue = Queue::new(1, Duration::from_millis(60)).unwrap();
+
+        for _ in 0..2 {
+            queue
+                .queue_grouped(
+                    BASE_WORKFLOW,
+                    SAMPLE_FILES,
+                    PROTEIN_FASTA_FILE,
+                    Some(MODIFICATIONS_FILE),
+                    OUTPUT_DIRECTORY,
+                )
+                .unwrap();
+        }
+
+        fs::remove_file(WFLW_FILE).unwrap();
+
+        assert!(!queue.running());
+        assert_eq!(queue.worker_pool.available_workers(), 1);
+        assert!(matches!(
+            &job_statuses(&queue)[..],
+            [Status::Queued, Status::Queued]
+        ));
+
+        // Then, run the queue and make sure it cannot be reconfigured whilst running
+        let test_code = || {
+            queue.run().unwrap();
+
+            assert!(queue.running());
+
+            sleep_ms(5);
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert!(matches!(
+                &job_statuses(&queue)[..],
+                [Status::Running(..), Status::Queued]
+            ));
+
+            sleep_ms(50);
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert!(matches!(
+                &job_statuses(&queue)[..],
+                [Status::Completed(..), Status::Queued]
+            ));
+
+            assert_eq!(
+                queue.set_workers(3).unwrap_err().to_string(),
+                "the `Queue` must be stopped to `set_workers()`"
+            );
+            assert_eq!(
+                queue
+                    .set_stagger_duration(Duration::default())
+                    .unwrap_err()
+                    .to_string(),
+                "the `Queue` must be stopped to `set_stagger_duration()`"
+            );
+
+            sleep_ms(20);
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert!(matches!(
+                &job_statuses(&queue)[..],
+                [Status::Completed(..), Status::Running(..)]
+            ));
+
+            sleep_ms(50);
+
+            assert_eq!(queue.worker_pool.available_workers(), 1);
+            assert!(matches!(
+                &job_statuses(&queue)[..],
+                [Status::Completed(..), Status::Completed(..)]
+            ));
+
+            assert!(!queue.running());
+        };
+
+        unsafe { with_test_path(FAST_PATH, test_code) }
+
+        // Reconfigure the queue and add some new `Job`s
+
+        queue.set_workers(3).unwrap();
+        queue.set_stagger_duration(Duration::default()).unwrap();
+
+        queue
+            .queue(
+                BASE_WORKFLOW,
+                SAMPLE_FILES,
+                PROTEIN_FASTA_FILE,
+                Some(MODIFICATIONS_FILE),
+                OUTPUT_DIRECTORY,
+            )
+            .unwrap();
+
+        fs::remove_file(WT_WFLW_FILE).unwrap();
+        fs::remove_file(LDT_WFLW_FILE).unwrap();
+
+        // Run the queue again, making sure that our changes were applied and that `Job` history is retained
+        let test_code = || {
+            queue.run().unwrap();
+
+            assert!(queue.running());
+
+            sleep_ms(5);
+
+            assert_eq!(queue.worker_pool.available_workers(), 1);
+            assert!(matches!(
+                &job_statuses(&queue)[..],
+                [
+                    Status::Completed(..),
+                    Status::Completed(..),
+                    Status::Running(..),
+                    Status::Running(..)
+                ]
+            ));
+
+            sleep_ms(50);
+
+            assert_eq!(queue.worker_pool.available_workers(), 2);
+            assert!(matches!(
+                dbg!(&job_statuses(&queue)[..]),
+                [
+                    Status::Completed(..),
+                    Status::Completed(..),
+                    Status::Failed(..),
+                    Status::Running(..)
+                ]
+            ));
+
+            assert_eq!(
+                queue.set_workers(3).unwrap_err().to_string(),
+                "the `Queue` must be stopped to `set_workers()`"
+            );
+            assert_eq!(
+                queue
+                    .set_stagger_duration(Duration::default())
+                    .unwrap_err()
+                    .to_string(),
+                "the `Queue` must be stopped to `set_stagger_duration()`"
+            );
+
+            sleep_ms(30);
+
+            assert_eq!(queue.worker_pool.available_workers(), 3);
+            assert!(matches!(
+                &job_statuses(&queue)[..],
+                [
+                    Status::Completed(..),
+                    Status::Completed(..),
+                    Status::Failed(..),
+                    Status::Completed(..)
+                ]
+            ));
+
+            assert!(!queue.running());
+        };
+
+        unsafe { with_test_path(FAST_PATH, test_code) }
+
+        fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
+        fs::remove_dir_all(WT_RESULT_DIRECTORY).unwrap();
+        fs::remove_dir_all(LDT_RESULT_DIRECTORY).unwrap();
     }
 }
