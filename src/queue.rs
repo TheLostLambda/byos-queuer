@@ -2,8 +2,7 @@
 use std::{
     cmp,
     path::Path,
-    sync::{Arc, Mutex},
-    thread,
+    sync::{Arc, Condvar, Mutex, WaitTimeoutResult},
     time::{Duration, Instant},
 };
 
@@ -23,6 +22,7 @@ pub struct Queue {
     jobs: Jobs,
     worker_pool: WorkerPool,
     stagger_duration: Duration,
+    cancelled: CancelledCondvar,
     last_job_run_at: SyncInstant,
 }
 
@@ -30,6 +30,7 @@ impl Queue {
     pub fn new(workers: usize, stagger_duration: Duration) -> Result<Self> {
         let jobs = Arc::new(Mutex::new(Vec::new()));
         let worker_pool = WorkerPool::new(workers)?;
+        let cancelled = CancelledCondvar::default();
         // NOTE: By setting this `Instant` to be `stagger_duration` in the past, we're ensuring no launch delay for the
         // first job — the `stagger_duration` will have already "passed" by the time the `Queue` is constructed
         let last_job_run_at = Arc::new(Mutex::new(
@@ -42,6 +43,7 @@ impl Queue {
             jobs,
             worker_pool,
             stagger_duration,
+            cancelled,
             last_job_run_at,
         })
     }
@@ -78,9 +80,6 @@ impl Queue {
             .collect()
     }
 
-    // TODO: If the `Queue` is already running, then any new workflows added to the queue are started immediately!
-    // Otherwise, just add them to `jobs` and wait for `Queue.run()` to be called! This variable should be `true`
-    // as long as anything in the `jobs` list isn't finished (i.e. `Queued` or `Running`)
     pub fn queue(
         &self,
         base_workflow: impl AsRef<Path> + Copy,
@@ -120,7 +119,7 @@ impl Queue {
 
         self.jobs.lock().unwrap().push(Arc::new(Job::new(workflow)));
 
-        if self.running() {
+        if self.running() && !self.cancelled() {
             // NOTE: `WorkerPool.spawn()` will check if there is room in the pool for another worker, if there isn't,
             // then it will return an `Err`. We don't actually mind this outcome, so just discard the `Result` with a
             // `let _ = ...` binding.
@@ -131,6 +130,8 @@ impl Queue {
     }
 
     pub fn run(&self) -> Result<usize> {
+        self.cancelled.set(false);
+
         let queued_jobs = self
             .jobs
             .lock()
@@ -143,6 +144,18 @@ impl Queue {
 
         self.spawn_workers(new_workers)
     }
+
+    pub fn cancel(&self) -> Result<()> {
+        self.cancelled.set(true);
+
+        for job in self.jobs.lock().unwrap().iter() {
+            if let Status::Running(..) = job.status() {
+                job.reset()?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 // Private Helper Code =================================================================================================
@@ -150,19 +163,67 @@ impl Queue {
 type Jobs = Arc<Mutex<Vec<Arc<Job>>>>;
 type SyncInstant = Arc<Mutex<Instant>>;
 
+#[derive(Clone, Default)]
+struct CancelledCondvar(Arc<(Mutex<bool>, Condvar)>);
+
+impl CancelledCondvar {
+    fn cancelled(&self) -> &Mutex<bool> {
+        &self.0.0
+    }
+
+    fn condvar(&self) -> &Condvar {
+        &self.0.1
+    }
+
+    fn get(&self) -> bool {
+        *self.cancelled().lock().unwrap()
+    }
+
+    fn set(&self, value: bool) {
+        *self.cancelled().lock().unwrap() = value;
+        self.condvar().notify_all();
+    }
+
+    fn sleep_until_elapsed_or_cancelled(
+        &self,
+        instant: Instant,
+        target: Duration,
+    ) -> WaitTimeoutResult {
+        let elapsed = instant.elapsed();
+        let duration_to_go = target.saturating_sub(elapsed);
+
+        let (lock, result) = self
+            .condvar()
+            .wait_timeout_while(
+                self.cancelled().lock().unwrap(),
+                duration_to_go,
+                |&mut cancelled| !cancelled,
+            )
+            .unwrap();
+        drop(lock);
+
+        result
+    }
+}
+
 // FIXME: Reorder methods into something sensible!
 impl Queue {
+    fn cancelled(&self) -> bool {
+        self.cancelled.get()
+    }
+
     fn running(&self) -> bool {
         self.worker_pool.running()
     }
 
     fn spawn_workers(&self, new_workers: usize) -> Result<usize> {
-        let jobs = Arc::clone(&self.jobs);
+        let jobs = self.jobs.clone();
         let stagger_duration = self.stagger_duration;
-        let last_job_run_at = Arc::clone(&self.last_job_run_at);
+        let cancelled = self.cancelled.clone();
+        let last_job_run_at = self.last_job_run_at.clone();
 
         self.worker_pool.spawn(new_workers, move || {
-            Self::worker(&jobs, stagger_duration, &last_job_run_at);
+            Self::worker(&jobs, stagger_duration, &cancelled, &last_job_run_at);
         })
     }
 
@@ -174,40 +235,43 @@ impl Queue {
             .cloned()
     }
 
-    fn worker(jobs: &Jobs, stagger_duration: Duration, last_job_run_at: &SyncInstant) {
+    fn worker(
+        jobs: &Jobs,
+        stagger_duration: Duration,
+        cancelled: &CancelledCondvar,
+        last_job_run_at: &SyncInstant,
+    ) {
         // NOTE: Keep an eye on https://github.com/rust-lang/rust-clippy/issues/12128, this is a false positive!
         #[allow(clippy::significant_drop_tightening)]
         let next_job_staggered = || {
-            let mut last_job_run_at = last_job_run_at.lock().unwrap();
+            let last_job_run_at = last_job_run_at.lock().unwrap();
 
-            Self::sleep_until_elapsed(*last_job_run_at, stagger_duration);
+            let wait_result =
+                cancelled.sleep_until_elapsed_or_cancelled(*last_job_run_at, stagger_duration);
 
-            // NOTE: If the `jobs` `Mutex` is contended, then this might take some time. Keep the `last_job_run_at`
-            // `Mutex` locked and only start the timer after `Self::next_job()` returns
-            let next_job = Self::next_job(jobs);
-            *last_job_run_at = Instant::now();
+            // NOTE: If we *didn't* time out, then this `Queue` must have been cancelled — return `None` to break out
+            // of the worker loop and shutdown the thread
+            if !wait_result.timed_out() {
+                return None;
+            }
 
-            next_job.map(|job| (job, last_job_run_at))
+            Self::next_job(jobs).map(|job| (job, last_job_run_at))
         };
 
-        while let Some((job, lock)) = next_job_staggered() {
+        while let Some((job, mut last_job_run_at)) = next_job_staggered() {
             // SAFETY: The call to `next_job_staggered()` should only ever return `Status::Queued` `Job`s, so
             // `Job.run()` shouldn't ever fail!
             job.start().unwrap();
+
             // NOTE: Dropping this lock here finally allows other threads to grab another `Job` — it's important this
             // lock is dropped *after* `job.start()` is called, since `job.start()` is what sets the `Job` status to
             // `Running`. If this lock is dropped any earlier, then it's possible for several threads to start on the
             // same `Job`, since the `Job` status will still be `Queued`!
-            drop(lock);
+            *last_job_run_at = Instant::now();
+            drop(last_job_run_at);
+
             job.wait();
         }
-    }
-
-    fn sleep_until_elapsed(instant: Instant, target: Duration) {
-        let elapsed = instant.elapsed();
-        let duration_to_go = target.saturating_sub(elapsed);
-
-        thread::sleep(duration_to_go);
     }
 }
 
@@ -215,7 +279,7 @@ impl Queue {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{fs, thread};
 
     use const_format::formatc;
     use serial_test::serial;
@@ -248,7 +312,10 @@ mod tests {
 
     fn sleep_until_elapsed_ms(instant: Instant, millis: u64) {
         let target = Duration::from_millis(millis);
-        Queue::sleep_until_elapsed(instant, target);
+        let elapsed = instant.elapsed();
+        let duration_to_go = target.saturating_sub(elapsed);
+
+        thread::sleep(duration_to_go);
     }
 
     #[test]
@@ -482,7 +549,7 @@ mod tests {
                 ]
             ));
 
-            sleep_ms(180);
+            sleep_ms(170);
 
             assert_eq!(queue.worker_pool.available_workers(), 1);
             assert!(matches!(
@@ -673,6 +740,96 @@ mod tests {
             ));
 
             assert!(!queue.running());
+        };
+
+        unsafe { with_test_path(FAST_PATH, test_code) }
+
+        fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
+        fs::remove_dir_all(WT_RESULT_DIRECTORY).unwrap();
+        fs::remove_dir_all(LDT_RESULT_DIRECTORY).unwrap();
+    }
+
+    #[test]
+    #[serial]
+    fn stop() {
+        // First, queue some initial `Job`s
+        let queue = Queue::new(2, Duration::from_millis(20)).unwrap();
+
+        queue
+            .queue_grouped(
+                BASE_WORKFLOW,
+                SAMPLE_FILES,
+                PROTEIN_FASTA_FILE,
+                Some(MODIFICATIONS_FILE),
+                OUTPUT_DIRECTORY,
+            )
+            .unwrap();
+
+        queue
+            .queue(
+                BASE_WORKFLOW,
+                SAMPLE_FILES,
+                PROTEIN_FASTA_FILE,
+                Some(MODIFICATIONS_FILE),
+                OUTPUT_DIRECTORY,
+            )
+            .unwrap();
+
+        fs::remove_file(WFLW_FILE).unwrap();
+        fs::remove_file(WT_WFLW_FILE).unwrap();
+        fs::remove_file(LDT_WFLW_FILE).unwrap();
+
+        assert!(!queue.running());
+        assert_eq!(queue.worker_pool.available_workers(), 2);
+        assert!(matches!(
+            &job_statuses(&queue)[..],
+            [Status::Queued, Status::Queued, Status::Queued]
+        ));
+
+        // Then, run the queue and add some more `Job`s whilst it's running!
+        let test_code = || {
+            queue.run().unwrap();
+
+            assert!(queue.running());
+
+            sleep_ms(5);
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert!(matches!(
+                &job_statuses(&queue)[..],
+                [Status::Running(..), Status::Queued, Status::Queued]
+            ));
+
+            sleep_ms(25);
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert!(matches!(
+                &job_statuses(&queue)[..],
+                [Status::Running(..), Status::Running(..), Status::Queued]
+            ));
+
+            sleep_ms(20);
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert!(matches!(
+                &job_statuses(&queue)[..],
+                [
+                    Status::Completed(..),
+                    Status::Running(..),
+                    Status::Running(..)
+                ]
+            ));
+
+            queue.cancel().unwrap();
+
+            sleep_ms(5);
+
+            assert!(!queue.running());
+            assert_eq!(queue.worker_pool.available_workers(), 2);
+            assert!(matches!(
+                &job_statuses(&queue)[..],
+                [Status::Completed(..), Status::Queued, Status::Queued]
+            ));
         };
 
         unsafe { with_test_path(FAST_PATH, test_code) }

@@ -81,10 +81,16 @@ impl Job {
 
     pub fn wait(&self) {
         if let Status::Running(handle, instant) = self.status() {
-            *self.status.lock().unwrap() = match handle.wait() {
+            let exit_status = match handle.wait() {
                 Ok(_) => Status::Completed(instant.elapsed()),
                 Err(error) => Status::Failed(Arc::new(error.into()), instant.elapsed()),
             };
+
+            // NOTE: We're rechecking the status to make sure it hasn't been reset by another thread since we started
+            // waiting — if it has, we should leave the status as is!
+            if let Status::Running(..) = self.status() {
+                *self.status.lock().unwrap() = exit_status;
+            }
         }
     }
 }
