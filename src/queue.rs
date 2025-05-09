@@ -167,9 +167,8 @@ impl Queue {
     fn worker(jobs: &Jobs, stagger_duration: Duration, last_job_run_at: &SyncInstant) {
         let next_job_staggered = || {
             let mut last_job_run_at = last_job_run_at.lock().unwrap();
-            let since_last_job_run = last_job_run_at.elapsed();
 
-            thread::sleep(stagger_duration.saturating_sub(since_last_job_run));
+            Self::sleep_until_elapsed(*last_job_run_at, stagger_duration);
 
             // NOTE: If the `jobs` `Mutex` is contended, then this might take some time. Keep the `last_job_run_at`
             // `Mutex` locked and only start the timer after `Self::next_job()` returns
@@ -184,6 +183,13 @@ impl Queue {
             // `Job.run()` shouldn't ever fail!
             job.run().unwrap();
         }
+    }
+
+    fn sleep_until_elapsed(instant: Instant, target: Duration) {
+        let elapsed = instant.elapsed();
+        let duration_to_go = target.saturating_sub(elapsed);
+
+        thread::sleep(duration_to_go);
     }
 }
 
