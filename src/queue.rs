@@ -107,7 +107,11 @@ impl Queue {
             output_directory,
         )?;
 
-        self.jobs.lock().unwrap().push(Arc::new(Job::new(workflow)));
+        // FIXME: Put something real as the second argument here!
+        self.jobs
+            .lock()
+            .unwrap()
+            .push(Arc::new(Job::new(workflow, None)));
 
         if self.running() && !self.cancelled() {
             // NOTE: `WorkerPool.spawn()` will check if there is room in the pool for another worker, if there isn't,

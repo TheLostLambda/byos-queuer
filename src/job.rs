@@ -28,13 +28,19 @@ pub enum Status {
 pub struct Job {
     workflow: Workflow,
     status: Mutex<Status>,
+    on_update: OnUpdateCallback,
 }
 
 impl Job {
     #[must_use]
-    pub fn new(workflow: Workflow) -> Self {
+    pub fn new(workflow: Workflow, on_update: OnUpdateCallback) -> Self {
         let status = Mutex::new(Status::default());
-        Self { workflow, status }
+
+        Self {
+            workflow,
+            status,
+            on_update,
+        }
     }
 
     pub fn name(&self) -> &str {
@@ -52,6 +58,7 @@ impl Job {
         }
 
         *self.status.lock().unwrap() = Status::default();
+        self.on_update();
 
         Ok(())
     }
@@ -69,6 +76,7 @@ impl Job {
                 let instant = Instant::now();
                 let handle = Arc::new(self.workflow.start()?);
                 *self.status.lock().unwrap() = Status::Running(Arc::clone(&handle), instant);
+                self.on_update();
 
                 Ok(())
             }
@@ -90,7 +98,20 @@ impl Job {
             // waiting — if it has, we should leave the status as is!
             if let Status::Running(..) = self.status() {
                 *self.status.lock().unwrap() = exit_status;
+                self.on_update();
             }
+        }
+    }
+}
+
+// Private Helper Code =================================================================================================
+
+type OnUpdateCallback = Option<Arc<dyn Fn() + Send + Sync>>;
+
+impl Job {
+    fn on_update(&self) {
+        if let Some(on_update) = &self.on_update {
+            on_update();
         }
     }
 }
@@ -99,7 +120,7 @@ impl Job {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, thread};
+    use std::{fs, sync::RwLock, thread};
 
     use serial_test::serial;
 
@@ -136,11 +157,13 @@ mod tests {
         fs::remove_file(WFLW_FILE).unwrap();
 
         // Run a job that should complete sucessfully
-        let job = Arc::new(Job::new(workflow));
+        let job = Arc::new(Job::new(workflow, None));
 
-        let completes_job = Arc::clone(&job);
-        thread::spawn(move || unsafe {
-            with_test_path(COMPLETES_PATH, || completes_job.run().unwrap());
+        thread::spawn({
+            let job = Arc::clone(&job);
+            move || unsafe {
+                with_test_path(COMPLETES_PATH, || job.run().unwrap());
+            }
         });
 
         sleep_ms(5);
@@ -157,8 +180,12 @@ mod tests {
         job.reset().unwrap();
 
         // Run a job that should fail
-        let fails_job = Arc::clone(&job);
-        thread::spawn(move || unsafe { with_test_path(FAILS_PATH, || fails_job.run().unwrap()) });
+        thread::spawn({
+            let job = Arc::clone(&job);
+            move || unsafe {
+                with_test_path(FAILS_PATH, || job.run().unwrap());
+            }
+        });
 
         sleep_ms(5);
 
@@ -174,6 +201,61 @@ mod tests {
             );
             assert!(Duration::from_millis(10) < run_time && run_time < Duration::from_millis(20));
         }
+
+        fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
+    }
+
+    #[test]
+    #[serial]
+    fn on_update_callback() {
+        let workflow = Workflow::new(
+            BASE_WORKFLOW,
+            SAMPLE_FILES,
+            PROTEIN_FASTA_FILE,
+            Some(MODIFICATIONS_FILE),
+            OUTPUT_DIRECTORY,
+        )
+        .unwrap();
+
+        fs::remove_file(WFLW_FILE).unwrap();
+
+        // Construct a `Job` with a callback
+        let job = Arc::new(RwLock::new(Job::new(workflow, None)));
+
+        let current_thread = thread::current();
+        let updates = Arc::new(Mutex::new(Vec::new()));
+        let on_update = Arc::new({
+            let updates = Arc::clone(&updates);
+            let job = Arc::clone(&job);
+            move || {
+                updates.lock().unwrap().push(job.read().unwrap().status());
+                current_thread.unpark();
+            }
+        });
+
+        job.write().unwrap().on_update = Some(on_update);
+
+        // Start the `Job` and make sure the callback is being invoked!
+        thread::spawn({
+            let job = Arc::clone(&job);
+            move || unsafe {
+                with_test_path(COMPLETES_PATH, || job.read().unwrap().run().unwrap());
+            }
+        });
+
+        let timeout = Duration::from_millis(100);
+        let start = Instant::now();
+
+        thread::park_timeout(timeout);
+        assert!(start.elapsed() < Duration::from_millis(5));
+
+        thread::park_timeout(timeout);
+        assert!(dbg!(start.elapsed()) < Duration::from_millis(15));
+
+        assert!(matches!(
+            updates.lock().unwrap()[..],
+            [Status::Running(..), Status::Completed(..)]
+        ));
 
         fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
     }
