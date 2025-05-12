@@ -2,7 +2,7 @@
 use std::{
     cmp,
     path::Path,
-    sync::{Arc, Mutex},
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
@@ -12,7 +12,7 @@ use color_eyre::eyre::{OptionExt, Result, eyre};
 // Local Crate Imports
 use crate::{
     cancellable_timer::CancellableTimer,
-    job::{Job, Status},
+    job::{Job, OnUpdateCallback, Status},
     worker_pool::WorkerPool,
     workflow::Workflow,
 };
@@ -23,11 +23,16 @@ pub struct Queue {
     jobs: Jobs,
     worker_pool: WorkerPool,
     stagger_timer: StaggerTimer,
+    on_update: OnUpdateCallback,
 }
 
 impl Queue {
-    pub fn new(workers: usize, stagger_duration: Duration) -> Result<Self> {
-        let jobs = Arc::new(Mutex::new(Vec::new()));
+    pub fn new(
+        workers: usize,
+        stagger_duration: Duration,
+        on_update: OnUpdateCallback,
+    ) -> Result<Self> {
+        let jobs = Arc::new(RwLock::new(Vec::new()));
         let worker_pool = WorkerPool::new(workers)?;
         let stagger_timer = Self::stagger_timer(stagger_duration)?;
 
@@ -35,6 +40,7 @@ impl Queue {
             jobs,
             worker_pool,
             stagger_timer,
+            on_update,
         })
     }
 
@@ -57,7 +63,8 @@ impl Queue {
     pub fn clear_jobs(&self) -> Result<()> {
         self.error_if_running("clear_jobs")?;
 
-        self.jobs.lock().unwrap().clear();
+        self.jobs.write().unwrap().clear();
+        self.on_update();
 
         Ok(())
     }
@@ -65,7 +72,7 @@ impl Queue {
     pub fn reset_jobs(&self) -> Result<()> {
         self.error_if_running("reset_jobs")?;
 
-        for job in self.jobs.lock().unwrap().iter() {
+        for job in self.jobs.read().unwrap().iter() {
             job.reset()?;
         }
 
@@ -75,7 +82,7 @@ impl Queue {
     #[must_use]
     pub fn jobs(&self) -> Vec<(String, Status)> {
         self.jobs
-            .lock()
+            .read()
             .unwrap()
             .iter()
             .map(|job| (job.name().to_owned(), job.status()))
@@ -119,11 +126,11 @@ impl Queue {
             output_directory,
         )?;
 
-        // FIXME: Put something real as the second argument here!
         self.jobs
-            .lock()
+            .write()
             .unwrap()
-            .push(Arc::new(Job::new(workflow, None)));
+            .push(Arc::new(Job::new(workflow, self.on_update.clone())));
+        self.on_update();
 
         if self.running() && !self.cancelled() {
             // NOTE: `WorkerPool.spawn()` will check if there is room in the pool for another worker, if there isn't,
@@ -140,7 +147,7 @@ impl Queue {
 
         let queued_jobs = self
             .jobs
-            .lock()
+            .read()
             .unwrap()
             .iter()
             .filter(|job| matches!(job.status(), Status::Queued))
@@ -154,7 +161,7 @@ impl Queue {
     pub fn cancel(&self) -> Result<()> {
         self.stagger_timer.cancel();
 
-        for job in self.jobs.lock().unwrap().iter() {
+        for job in self.jobs.read().unwrap().iter() {
             if let Status::Running(..) = job.status() {
                 job.reset()?;
             }
@@ -166,7 +173,7 @@ impl Queue {
 
 // Private Helper Code =================================================================================================
 
-type Jobs = Arc<Mutex<Vec<Arc<Job>>>>;
+type Jobs = Arc<RwLock<Vec<Arc<Job>>>>;
 type StaggerTimer = Arc<CancellableTimer>;
 
 impl Queue {
@@ -187,6 +194,12 @@ impl Queue {
         }
 
         Ok(())
+    }
+
+    fn on_update(&self) {
+        if let Some(on_update) = &self.on_update {
+            on_update();
+        }
     }
 
     fn running(&self) -> bool {
@@ -235,7 +248,7 @@ impl Queue {
     }
 
     fn next_job(jobs: &Jobs) -> Option<Arc<Job>> {
-        jobs.lock()
+        jobs.read()
             .unwrap()
             .iter()
             .find(|job| matches!(job.status(), Status::Queued))
@@ -247,7 +260,11 @@ impl Queue {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, thread};
+    use std::{
+        fs,
+        sync::{Mutex, RwLock},
+        thread,
+    };
 
     use const_format::formatc;
     use serial_test::serial;
@@ -289,7 +306,7 @@ mod tests {
     #[test]
     #[serial]
     fn queue() {
-        let queue = Queue::new(1, Duration::default()).unwrap();
+        let queue = Queue::new(1, Duration::default(), None).unwrap();
 
         queue
             .queue(
@@ -318,7 +335,7 @@ mod tests {
     #[test]
     #[serial]
     fn queue_grouped() {
-        let queue = Queue::new(1, Duration::default()).unwrap();
+        let queue = Queue::new(1, Duration::default(), None).unwrap();
 
         queue
             .queue_grouped(
@@ -343,7 +360,7 @@ mod tests {
     #[serial]
     fn run_checking_staggering() {
         // First, queue some `Job`s
-        let queue = Queue::new(3, Duration::from_millis(10)).unwrap();
+        let queue = Queue::new(3, Duration::from_millis(10), None).unwrap();
 
         queue
             .queue(
@@ -454,7 +471,7 @@ mod tests {
     #[serial]
     fn run_checking_addition_to_running_queue() {
         // First, queue an initial `Job`
-        let queue = Queue::new(2, Duration::from_millis(100)).unwrap();
+        let queue = Queue::new(2, Duration::from_millis(100), None).unwrap();
 
         queue
             .queue_grouped(
@@ -554,7 +571,7 @@ mod tests {
     #[serial]
     fn reconfigure_when_stopped() {
         // First, queue an initial couple of `Job`s
-        let mut queue = Queue::new(1, Duration::from_millis(60)).unwrap();
+        let mut queue = Queue::new(1, Duration::from_millis(60), None).unwrap();
 
         for _ in 0..2 {
             queue
@@ -763,7 +780,7 @@ mod tests {
     #[serial]
     fn stop() {
         // First, queue some initial `Job`s
-        let queue = Queue::new(2, Duration::from_millis(20)).unwrap();
+        let queue = Queue::new(2, Duration::from_millis(20), None).unwrap();
 
         queue
             .queue_grouped(
@@ -848,5 +865,143 @@ mod tests {
         fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
         fs::remove_dir_all(WT_RESULT_DIRECTORY).unwrap();
         fs::remove_dir_all(LDT_RESULT_DIRECTORY).unwrap();
+    }
+
+    #[test]
+    #[serial]
+    #[allow(clippy::significant_drop_tightening)]
+    fn on_update_callback() {
+        // First, set up a `Queue` with a debugging / logging callback
+        let queue = Arc::new(RwLock::new(
+            Queue::new(3, Duration::from_millis(10), None).unwrap(),
+        ));
+
+        let current_thread = thread::current();
+        let updates = Arc::new(Mutex::new(Vec::new()));
+        let on_update = Arc::new({
+            let updates = Arc::clone(&updates);
+            let queue = Arc::clone(&queue);
+            move || {
+                updates
+                    .lock()
+                    .unwrap()
+                    .push(job_statuses(&queue.read().unwrap()));
+                current_thread.unpark();
+            }
+        });
+
+        queue.write().unwrap().on_update = Some(on_update);
+        let queue = queue.read().unwrap();
+
+        let timeout = Duration::from_millis(300);
+        let start = Instant::now();
+
+        // Then, actually queue some `Job`s
+        queue
+            .queue(
+                BASE_WORKFLOW,
+                SAMPLE_FILES,
+                PROTEIN_FASTA_FILE,
+                Some(MODIFICATIONS_FILE),
+                OUTPUT_DIRECTORY,
+            )
+            .unwrap();
+
+        thread::park_timeout(timeout);
+        assert!(start.elapsed() < Duration::from_millis(100));
+
+        queue
+            .queue_grouped(
+                BASE_WORKFLOW,
+                SAMPLE_FILES,
+                PROTEIN_FASTA_FILE,
+                Some(MODIFICATIONS_FILE),
+                OUTPUT_DIRECTORY,
+            )
+            .unwrap();
+
+        thread::park_timeout(timeout);
+        assert!(start.elapsed() < Duration::from_millis(150));
+
+        fs::remove_file(WT_WFLW_FILE).unwrap();
+        fs::remove_file(LDT_WFLW_FILE).unwrap();
+        fs::remove_file(WFLW_FILE).unwrap();
+
+        assert!(!queue.running());
+
+        // Next, make sure updates roll in incrementally!
+        let test_code = || {
+            queue.run().unwrap();
+
+            assert!(queue.running());
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(155));
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(170));
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(185));
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(205));
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(225));
+
+            queue.cancel().unwrap();
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(230));
+
+            sleep_ms(5);
+
+            assert!(!queue.running());
+
+            queue.reset_jobs().unwrap();
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(235));
+
+            queue.clear_jobs().unwrap();
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(240));
+        };
+
+        unsafe { with_test_path(FAST_PATH, test_code) }
+
+        let updates = updates.lock().unwrap();
+        let updates: Vec<_> = updates.iter().map(Vec::as_slice).collect();
+        assert!(matches!(
+            &updates[..],
+            [
+                [Status::Queued],
+                [Status::Queued, Status::Queued],
+                [Status::Queued, Status::Queued, Status::Queued],
+                [Status::Running(..), Status::Queued, Status::Queued],
+                [Status::Running(..), Status::Running(..), Status::Queued],
+                [
+                    Status::Running(..),
+                    Status::Running(..),
+                    Status::Running(..)
+                ],
+                [Status::Failed(..), Status::Running(..), Status::Running(..)],
+                [
+                    Status::Failed(..),
+                    Status::Running(..),
+                    Status::Completed(..)
+                ],
+                [Status::Failed(..), Status::Queued, Status::Completed(..)],
+                [Status::Queued, Status::Queued, Status::Completed(..)],
+                [Status::Queued, Status::Queued, Status::Queued],
+                [],
+            ]
+        ));
+
+        fs::remove_dir_all(WT_RESULT_DIRECTORY).unwrap();
+        fs::remove_dir_all(LDT_RESULT_DIRECTORY).unwrap();
+        fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
     }
 }

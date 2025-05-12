@@ -53,11 +53,17 @@ impl Job {
     }
 
     pub fn reset(&self) -> Result<()> {
-        if let Status::Running(handle, _) = self.status() {
-            handle.kill()?;
+        let prereset_status = self.status();
+        *self.status.lock().unwrap() = Status::default();
+
+        match prereset_status {
+            Status::Queued => return Ok(()),
+            Status::Running(handle, _) => handle.kill()?,
+            _ => (),
         }
 
-        *self.status.lock().unwrap() = Status::default();
+        // NOTE: If we've made it here, we can be certain that `status` has changed and that we need to signal an
+        // update — if the `Job` was already `Queued`, then we would have returned early!
         self.on_update();
 
         Ok(())
@@ -106,7 +112,7 @@ impl Job {
 
 // Private Helper Code =================================================================================================
 
-type OnUpdateCallback = Option<Arc<dyn Fn() + Send + Sync>>;
+pub(crate) type OnUpdateCallback = Option<Arc<dyn Fn() + Send + Sync>>;
 
 impl Job {
     fn on_update(&self) {
@@ -250,7 +256,7 @@ mod tests {
         assert!(start.elapsed() < Duration::from_millis(5));
 
         thread::park_timeout(timeout);
-        assert!(dbg!(start.elapsed()) < Duration::from_millis(15));
+        assert!(start.elapsed() < Duration::from_millis(15));
 
         assert!(matches!(
             updates.lock().unwrap()[..],
