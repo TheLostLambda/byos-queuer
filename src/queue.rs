@@ -2,7 +2,7 @@
 use std::{
     cmp,
     path::Path,
-    sync::{Arc, Condvar, Mutex, WaitTimeoutResult},
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -11,6 +11,7 @@ use color_eyre::eyre::{OptionExt, Result, eyre};
 
 // Local Crate Imports
 use crate::{
+    cancellable_timer::CancellableTimer,
     job::{Job, Status},
     worker_pool::WorkerPool,
     workflow::Workflow,
@@ -21,30 +22,19 @@ use crate::{
 pub struct Queue {
     jobs: Jobs,
     worker_pool: WorkerPool,
-    stagger_duration: Duration,
-    cancelled: CancelledCondvar,
-    last_job_run_at: SyncInstant,
+    stagger_timer: StaggerTimer,
 }
 
 impl Queue {
     pub fn new(workers: usize, stagger_duration: Duration) -> Result<Self> {
         let jobs = Arc::new(Mutex::new(Vec::new()));
         let worker_pool = WorkerPool::new(workers)?;
-        let cancelled = CancelledCondvar::default();
-        // NOTE: By setting this `Instant` to be `stagger_duration` in the past, we're ensuring no launch delay for the
-        // first job — the `stagger_duration` will have already "passed" by the time the `Queue` is constructed
-        let last_job_run_at = Arc::new(Mutex::new(
-            Instant::now()
-                .checked_sub(stagger_duration)
-                .ok_or_eyre("`stagger_duration` was too large")?,
-        ));
+        let stagger_timer = Self::stagger_timer(stagger_duration)?;
 
         Ok(Self {
             jobs,
             worker_pool,
-            stagger_duration,
-            cancelled,
-            last_job_run_at,
+            stagger_timer,
         })
     }
 
@@ -65,7 +55,7 @@ impl Queue {
             ));
         }
 
-        self.stagger_duration = stagger_duration;
+        self.stagger_timer = Self::stagger_timer(stagger_duration)?;
 
         Ok(())
     }
@@ -130,7 +120,7 @@ impl Queue {
     }
 
     pub fn run(&self) -> Result<usize> {
-        self.cancelled.set(false);
+        self.stagger_timer.resume();
 
         let queued_jobs = self
             .jobs
@@ -146,7 +136,7 @@ impl Queue {
     }
 
     pub fn cancel(&self) -> Result<()> {
-        self.cancelled.set(true);
+        self.stagger_timer.cancel();
 
         for job in self.jobs.lock().unwrap().iter() {
             if let Status::Running(..) = job.status() {
@@ -161,104 +151,51 @@ impl Queue {
 // Private Helper Code =================================================================================================
 
 type Jobs = Arc<Mutex<Vec<Arc<Job>>>>;
-type SyncInstant = Arc<Mutex<Instant>>;
+type StaggerTimer = Arc<CancellableTimer>;
 
-#[derive(Clone, Default)]
-struct CancelledCondvar(Arc<(Mutex<bool>, Condvar)>);
-
-impl CancelledCondvar {
-    fn cancelled(&self) -> &Mutex<bool> {
-        &self.0.0
-    }
-
-    fn condvar(&self) -> &Condvar {
-        &self.0.1
-    }
-
-    fn get(&self) -> bool {
-        *self.cancelled().lock().unwrap()
-    }
-
-    fn set(&self, value: bool) {
-        *self.cancelled().lock().unwrap() = value;
-        self.condvar().notify_all();
-    }
-
-    fn sleep_until_elapsed_or_cancelled(
-        &self,
-        instant: Instant,
-        target: Duration,
-    ) -> WaitTimeoutResult {
-        let elapsed = instant.elapsed();
-        let duration_to_go = target.saturating_sub(elapsed);
-
-        let (lock, result) = self
-            .condvar()
-            .wait_timeout_while(
-                self.cancelled().lock().unwrap(),
-                duration_to_go,
-                |&mut cancelled| !cancelled,
-            )
-            .unwrap();
-        drop(lock);
-
-        result
-    }
-}
-
-// FIXME: Reorder methods into something sensible!
 impl Queue {
-    fn cancelled(&self) -> bool {
-        self.cancelled.get()
+    fn stagger_timer(stagger_duration: Duration) -> Result<StaggerTimer> {
+        // NOTE: By setting this `Instant` to be `stagger_duration` in the past, we're ensuring no launch delay for the
+        // first job — the `stagger_duration` will have already "passed" by the time the `CancellableTimer` is
+        // constructed
+        let start = Instant::now()
+            .checked_sub(stagger_duration)
+            .ok_or_eyre("`stagger_duration` was too large")?;
+
+        Ok(Arc::new(CancellableTimer::new(start, stagger_duration)))
     }
 
     fn running(&self) -> bool {
         self.worker_pool.running()
     }
 
+    fn cancelled(&self) -> bool {
+        self.stagger_timer.cancelled()
+    }
+
     fn spawn_workers(&self, new_workers: usize) -> Result<usize> {
-        let jobs = self.jobs.clone();
-        let stagger_duration = self.stagger_duration;
-        let cancelled = self.cancelled.clone();
-        let last_job_run_at = self.last_job_run_at.clone();
+        let jobs = Arc::clone(&self.jobs);
+        let stagger_timer = Arc::clone(&self.stagger_timer);
 
         self.worker_pool.spawn(new_workers, move || {
-            Self::worker(&jobs, stagger_duration, &cancelled, &last_job_run_at);
+            Self::worker(&jobs, &stagger_timer);
         })
     }
 
-    fn next_job(jobs: &Jobs) -> Option<Arc<Job>> {
-        jobs.lock()
-            .unwrap()
-            .iter()
-            .find(|job| matches!(job.status(), Status::Queued))
-            .cloned()
-    }
-
-    fn worker(
-        jobs: &Jobs,
-        stagger_duration: Duration,
-        cancelled: &CancelledCondvar,
-        last_job_run_at: &SyncInstant,
-    ) {
+    fn worker(jobs: &Jobs, stagger_timer: &StaggerTimer) {
         // NOTE: Keep an eye on https://github.com/rust-lang/rust-clippy/issues/12128, this is a false positive!
         #[allow(clippy::significant_drop_tightening)]
         let next_job_staggered = || {
-            let last_job_run_at = last_job_run_at.lock().unwrap();
-
-            let wait_result =
-                cancelled.sleep_until_elapsed_or_cancelled(*last_job_run_at, stagger_duration);
-
-            // NOTE: If we *didn't* time out, then this `Queue` must have been cancelled — return `None` to break out
-            // of the worker loop and shutdown the thread
-            if !wait_result.timed_out() {
+            let Some(timer_guard) = stagger_timer.wait() else {
+                // NOTE: If we *didn't* time out, then this `Queue` must have been cancelled — return `None` to break out
+                // of the worker loop and shutdown the thread
                 return None;
-            }
+            };
 
-            Self::next_job(jobs).map(|job| (job, last_job_run_at))
+            Self::next_job(jobs).map(|job| (job, timer_guard))
         };
 
-        while let Some((job, mut last_job_run_at)) = next_job_staggered() {
+        while let Some((job, timer_guard)) = next_job_staggered() {
             // SAFETY: The call to `next_job_staggered()` should only ever return `Status::Queued` `Job`s, so
             // `Job.run()` shouldn't ever fail!
             job.start().unwrap();
@@ -267,11 +204,18 @@ impl Queue {
             // lock is dropped *after* `job.start()` is called, since `job.start()` is what sets the `Job` status to
             // `Running`. If this lock is dropped any earlier, then it's possible for several threads to start on the
             // same `Job`, since the `Job` status will still be `Queued`!
-            *last_job_run_at = Instant::now();
-            drop(last_job_run_at);
+            timer_guard.reset();
 
             job.wait();
         }
+    }
+
+    fn next_job(jobs: &Jobs) -> Option<Arc<Job>> {
+        jobs.lock()
+            .unwrap()
+            .iter()
+            .find(|job| matches!(job.status(), Status::Queued))
+            .cloned()
     }
 }
 
@@ -705,7 +649,7 @@ mod tests {
 
             assert_eq!(queue.worker_pool.available_workers(), 2);
             assert!(matches!(
-                dbg!(&job_statuses(&queue)[..]),
+                &job_statuses(&queue)[..],
                 [
                     Status::Completed(..),
                     Status::Completed(..),
@@ -825,6 +769,7 @@ mod tests {
             sleep_ms(5);
 
             assert!(!queue.running());
+            assert!(queue.cancelled());
             assert_eq!(queue.worker_pool.available_workers(), 2);
             assert!(matches!(
                 &job_statuses(&queue)[..],
