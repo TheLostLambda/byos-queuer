@@ -39,9 +39,7 @@ impl Queue {
     }
 
     pub fn set_workers(&mut self, workers: usize) -> Result<()> {
-        if self.running() {
-            return Err(eyre!("the `Queue` must be stopped to `set_workers()`"));
-        }
+        self.error_if_running("set_workers")?;
 
         self.worker_pool = WorkerPool::new(workers)?;
 
@@ -49,13 +47,27 @@ impl Queue {
     }
 
     pub fn set_stagger_duration(&mut self, stagger_duration: Duration) -> Result<()> {
-        if self.running() {
-            return Err(eyre!(
-                "the `Queue` must be stopped to `set_stagger_duration()`"
-            ));
-        }
+        self.error_if_running("set_stagger_duration")?;
 
         self.stagger_timer = Self::stagger_timer(stagger_duration)?;
+
+        Ok(())
+    }
+
+    pub fn clear_jobs(&self) -> Result<()> {
+        self.error_if_running("clear_jobs")?;
+
+        self.jobs.lock().unwrap().clear();
+
+        Ok(())
+    }
+
+    pub fn reset_jobs(&self) -> Result<()> {
+        self.error_if_running("reset_jobs")?;
+
+        for job in self.jobs.lock().unwrap().iter() {
+            job.reset()?;
+        }
 
         Ok(())
     }
@@ -167,6 +179,14 @@ impl Queue {
             .ok_or_eyre("`stagger_duration` was too large")?;
 
         Ok(Arc::new(CancellableTimer::new(start, stagger_duration)))
+    }
+
+    fn error_if_running(&self, method_name: &str) -> Result<()> {
+        if self.running() {
+            return Err(eyre!("the `Queue` must be stopped to `{method_name}()`"));
+        }
+
+        Ok(())
     }
 
     fn running(&self) -> bool {
@@ -590,6 +610,14 @@ mod tests {
                     .to_string(),
                 "the `Queue` must be stopped to `set_stagger_duration()`"
             );
+            assert_eq!(
+                queue.clear_jobs().unwrap_err().to_string(),
+                "the `Queue` must be stopped to `clear_jobs()`"
+            );
+            assert_eq!(
+                queue.reset_jobs().unwrap_err().to_string(),
+                "the `Queue` must be stopped to `reset_jobs()`"
+            );
 
             sleep_ms(20);
 
@@ -673,6 +701,14 @@ mod tests {
                     .to_string(),
                 "the `Queue` must be stopped to `set_stagger_duration()`"
             );
+            assert_eq!(
+                queue.clear_jobs().unwrap_err().to_string(),
+                "the `Queue` must be stopped to `clear_jobs()`"
+            );
+            assert_eq!(
+                queue.reset_jobs().unwrap_err().to_string(),
+                "the `Queue` must be stopped to `reset_jobs()`"
+            );
 
             sleep_ms(30);
 
@@ -691,6 +727,32 @@ mod tests {
         };
 
         unsafe { with_test_path(FAST_PATH, test_code) }
+
+        assert!(matches!(
+            &job_statuses(&queue)[..],
+            [
+                Status::Completed(..),
+                Status::Completed(..),
+                Status::Failed(..),
+                Status::Completed(..)
+            ]
+        ));
+
+        queue.reset_jobs().unwrap();
+
+        assert!(matches!(
+            &job_statuses(&queue)[..],
+            [
+                Status::Queued,
+                Status::Queued,
+                Status::Queued,
+                Status::Queued
+            ]
+        ));
+
+        queue.clear_jobs().unwrap();
+
+        assert!(job_statuses(&queue).is_empty());
 
         fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
         fs::remove_dir_all(WT_RESULT_DIRECTORY).unwrap();
