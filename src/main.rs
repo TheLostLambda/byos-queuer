@@ -54,6 +54,7 @@ fn App() -> Element {
 
             input {
                 r#type: "file",
+                class: "file-input",
                 // Select a folder by setting the directory attribute
                 directory: true,
                 onchange: move |evt| {
