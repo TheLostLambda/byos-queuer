@@ -1,9 +1,5 @@
 @import "tailwindcss";
 
 @plugin "daisyui" {
-  themes: retro
-}
-
-#main {
-  @apply flex min-h-dvh flex-col p-8 bg-stone-900 text-stone-100;
+  themes: silk
 }

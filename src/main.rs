@@ -19,6 +19,9 @@ pub const FAVICON: Asset = asset!("/assets/favicon.ico");
 // The asset macro also minifies some assets like CSS and JS to make bundled smaller
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 
+// FIXME: Maybe replace this with an `indoc!`
+const INDEX_HTML: &str = include_str!("../index.html");
+
 fn main() -> Result<()> {
     color_eyre::install()?;
     // The `launch` function is the main entry point for a dioxus app. It takes a component and renders it with the platform feature
@@ -27,7 +30,8 @@ fn main() -> Result<()> {
         .with_cfg(
             desktop::Config::default()
                 .with_menu(None)
-                .with_window(WindowBuilder::new().with_title("Byos Queuer")),
+                .with_window(WindowBuilder::new().with_title("Byos Queuer"))
+                .with_custom_index(INDEX_HTML.to_string()),
         )
         .launch(App);
 
@@ -50,21 +54,32 @@ fn App() -> Element {
         Header {},
 
         main {
-            class: "grow",
+            class: "card w-9/10 bg-base-100 shadow-sm",
 
-            input {
-                r#type: "file",
-                class: "file-input",
-                // Select a folder by setting the directory attribute
-                directory: true,
-                onchange: move |evt| {
-                    if let Some(file_engine) = evt.files() {
-                        let files = file_engine.files();
-                        for file_name in files {
-                            println!("{file_name}");
+            div {
+                class: "flex flex-col card-body",
+
+                h2 {
+                    class: "card-title",
+                    "Job Queue"
+                }
+
+                input {
+                    r#type: "file",
+                    class: "file-input",
+                    // Select a folder by setting the directory attribute
+                    directory: true,
+                    onchange: move |evt| {
+                        if let Some(file_engine) = evt.files() {
+                            let files = file_engine.files();
+                            for file_name in files {
+                                println!("{file_name}");
+                            }
                         }
                     }
                 }
+
+                div { class: "divider" }
             }
         }
     }
