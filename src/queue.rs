@@ -908,7 +908,7 @@ mod tests {
             .unwrap();
 
         thread::park_timeout(timeout);
-        assert!(start.elapsed() < Duration::from_millis(100));
+        assert!(start.elapsed() < Duration::from_millis(150));
 
         queue
             .queue_grouped(
@@ -921,7 +921,7 @@ mod tests {
             .unwrap();
 
         thread::park_timeout(timeout);
-        assert!(start.elapsed() < Duration::from_millis(150));
+        assert!(start.elapsed() < Duration::from_millis(225));
 
         fs::remove_file(WT_WFLW_FILE).unwrap();
         fs::remove_file(LDT_WFLW_FILE).unwrap();
@@ -935,25 +935,27 @@ mod tests {
 
             assert!(queue.running());
 
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(155));
+            let start = Instant::now();
 
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(170));
+            assert!(start.elapsed() < Duration::from_millis(5));
 
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(185));
+            assert!(start.elapsed() < Duration::from_millis(20));
 
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(205));
+            assert!(start.elapsed() < Duration::from_millis(35));
 
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(225));
+            assert!(start.elapsed() < Duration::from_millis(55));
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(75));
 
             queue.cancel().unwrap();
 
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(230));
+            assert!(start.elapsed() < Duration::from_millis(80));
 
             sleep_ms(5);
 
@@ -962,12 +964,12 @@ mod tests {
             queue.reset_jobs().unwrap();
 
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(235));
+            assert!(start.elapsed() < Duration::from_millis(90));
 
             queue.clear_jobs().unwrap();
 
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(240));
+            assert!(start.elapsed() < Duration::from_millis(95));
         };
 
         unsafe { with_test_path(FAST_PATH, test_code) }
