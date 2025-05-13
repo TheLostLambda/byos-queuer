@@ -681,7 +681,7 @@ mod tests {
 
             assert!(queue.running());
 
-            sleep_ms(5);
+            sleep_ms(10);
 
             assert_eq!(queue.worker_pool.available_workers(), 1);
             assert!(matches!(
