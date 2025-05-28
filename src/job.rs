@@ -130,15 +130,15 @@ impl Job {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, sync::RwLock, thread};
+    use std::{sync::RwLock, thread};
 
-    use serial_test::serial;
+    use tempfile::tempdir;
 
     use crate::{
         worker_pool::tests::sleep_ms,
         workflow::tests::{
-            BASE_WORKFLOW, MODIFICATIONS_FILE, OUTPUT_DIRECTORY, PROTEIN_FASTA_FILE,
-            RESULT_DIRECTORY, SAMPLE_FILES, WFLW_FILE, with_test_path,
+            BASE_WORKFLOW, MODIFICATIONS_FILE, PROTEIN_FASTA_FILE, SAMPLE_FILES, result_file_in,
+            wflw_file_in, with_test_path,
         },
     };
 
@@ -150,21 +150,20 @@ mod tests {
     const FAILS_PATH: &str = "tests/scripts/job-fails";
 
     #[test]
-    #[serial]
     fn new_then_run() {
-        // Construct a new workflow
-        let _ = fs::remove_file(WFLW_FILE);
+        let temporary_directory = tempdir().unwrap();
+        let wflw_file = wflw_file_in(&temporary_directory);
+        let result_file = result_file_in(&temporary_directory);
 
+        // Construct a new workflow
         let workflow = Workflow::new(
             BASE_WORKFLOW,
             SAMPLE_FILES,
             PROTEIN_FASTA_FILE,
             Some(MODIFICATIONS_FILE),
-            OUTPUT_DIRECTORY,
+            &temporary_directory,
         )
         .unwrap();
-
-        fs::remove_file(WFLW_FILE).unwrap();
 
         // Run a job that should complete sucessfully
         let job = Arc::new(Job::new(workflow, None));
@@ -207,27 +206,28 @@ mod tests {
         if let Status::Failed(report, run_time) = job.status() {
             assert_eq!(
                 format!("{report:#}"),
-                r#"command ["PMi-Byos-Console.exe", "--mode=create-project", "--input", "tests/data/output/PG Monomers (WT, 6ldt; proteins.fasta; modifications.txt).wflw", "--output", "/home/tll/Documents/University/PhD/Scripts/Rust/byos-queuer/tests/data/output/PG Monomers (WT, 6ldt; proteins.fasta; modifications.txt)/Result"] exited with code 42"#
+                format!(
+                    r#"command ["PMi-Byos-Console.exe", "--mode=create-project", "--input", "{}", "--output", "{}"] exited with code 42"#,
+                    wflw_file.display(),
+                    result_file.display()
+                )
             );
             assert!(Duration::from_millis(10) < run_time && run_time < Duration::from_millis(20));
         }
-
-        fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
     }
 
     #[test]
-    #[serial]
     fn on_update_callback() {
+        let temporary_directory = tempdir().unwrap();
+
         let workflow = Workflow::new(
             BASE_WORKFLOW,
             SAMPLE_FILES,
             PROTEIN_FASTA_FILE,
             Some(MODIFICATIONS_FILE),
-            OUTPUT_DIRECTORY,
+            &temporary_directory,
         )
         .unwrap();
-
-        fs::remove_file(WFLW_FILE).unwrap();
 
         // Construct a `Job` with a callback
         let job = Arc::new(RwLock::new(Job::new(workflow, None)));
@@ -266,7 +266,5 @@ mod tests {
             updates.lock().unwrap()[..],
             [Status::Running(..), Status::Completed(..)]
         ));
-
-        fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
     }
 }

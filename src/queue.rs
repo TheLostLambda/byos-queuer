@@ -282,19 +282,17 @@ impl Queue {
 #[cfg(test)]
 mod tests {
     use std::{
-        fs,
         sync::{Mutex, RwLock},
         thread,
     };
 
-    use const_format::formatc;
-    use serial_test::serial;
+    use tempfile::tempdir;
 
     use crate::{
         worker_pool::tests::sleep_ms,
         workflow::tests::{
-            BASE_WORKFLOW, MODIFICATIONS_FILE, OUTPUT_DIRECTORY, PROTEIN_FASTA_FILE,
-            RESULT_DIRECTORY, SAMPLE_FILES, WFLW_FILE, WORKFLOW_NAME, with_test_path,
+            BASE_WORKFLOW, MODIFICATIONS_FILE, PROTEIN_FASTA_FILE, SAMPLE_FILES, WORKFLOW_NAME,
+            with_test_path,
         },
     };
 
@@ -302,12 +300,6 @@ mod tests {
 
     const WT_WORKFLOW_NAME: &str = "PG Monomers (WT; proteins.fasta; modifications.txt)";
     const LDT_WORKFLOW_NAME: &str = "PG Monomers (6ldt; proteins.fasta; modifications.txt)";
-
-    const WT_RESULT_DIRECTORY: &str = formatc!("{OUTPUT_DIRECTORY}/{WT_WORKFLOW_NAME}");
-    const LDT_RESULT_DIRECTORY: &str = formatc!("{OUTPUT_DIRECTORY}/{LDT_WORKFLOW_NAME}");
-
-    const WT_WFLW_FILE: &str = formatc!("{WT_RESULT_DIRECTORY}.wflw");
-    const LDT_WFLW_FILE: &str = formatc!("{LDT_RESULT_DIRECTORY}.wflw");
 
     const FAST_PATH: &str = "tests/scripts/queue-fast";
     const SLOW_PATH: &str = "tests/scripts/queue-slow";
@@ -325,8 +317,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn queue() {
+        let temporary_directory = tempdir().unwrap();
         let queue = Queue::new(1, Duration::default()).unwrap();
 
         queue
@@ -335,7 +327,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
-                OUTPUT_DIRECTORY,
+                &temporary_directory,
             )
             .unwrap();
 
@@ -348,14 +340,11 @@ mod tests {
         let (name, status) = &jobs[1];
         assert_eq!(name, LDT_WORKFLOW_NAME);
         assert!(matches!(status, Status::Queued));
-
-        fs::remove_file(WT_WFLW_FILE).unwrap();
-        fs::remove_file(LDT_WFLW_FILE).unwrap();
     }
 
     #[test]
-    #[serial]
     fn queue_grouped() {
+        let temporary_directory = tempdir().unwrap();
         let queue = Queue::new(1, Duration::default()).unwrap();
 
         queue
@@ -364,7 +353,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
-                OUTPUT_DIRECTORY,
+                &temporary_directory,
             )
             .unwrap();
 
@@ -373,13 +362,12 @@ mod tests {
         let (name, status) = &jobs[0];
         assert_eq!(name, WORKFLOW_NAME);
         assert!(matches!(status, Status::Queued));
-
-        fs::remove_file(WFLW_FILE).unwrap();
     }
 
     #[test]
-    #[serial]
     fn run_checking_staggering() {
+        let temporary_directory = tempdir().unwrap();
+
         // First, queue some `Job`s
         let queue = Queue::new(3, Duration::from_millis(10)).unwrap();
 
@@ -389,7 +377,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
-                OUTPUT_DIRECTORY,
+                &temporary_directory,
             )
             .unwrap();
 
@@ -399,13 +387,9 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
-                OUTPUT_DIRECTORY,
+                &temporary_directory,
             )
             .unwrap();
-
-        fs::remove_file(WT_WFLW_FILE).unwrap();
-        fs::remove_file(LDT_WFLW_FILE).unwrap();
-        fs::remove_file(WFLW_FILE).unwrap();
 
         assert!(!queue.running());
 
@@ -482,15 +466,12 @@ mod tests {
         };
 
         unsafe { with_test_path(FAST_PATH, test_code) }
-
-        fs::remove_dir_all(WT_RESULT_DIRECTORY).unwrap();
-        fs::remove_dir_all(LDT_RESULT_DIRECTORY).unwrap();
-        fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
     }
 
     #[test]
-    #[serial]
     fn run_checking_addition_to_running_queue() {
+        let temporary_directory = tempdir().unwrap();
+
         // First, queue an initial `Job`
         let queue = Queue::new(2, Duration::from_millis(100)).unwrap();
 
@@ -500,11 +481,9 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
-                OUTPUT_DIRECTORY,
+                &temporary_directory,
             )
             .unwrap();
-
-        fs::remove_file(WFLW_FILE).unwrap();
 
         assert!(!queue.running());
         assert_eq!(queue.worker_pool.available_workers(), 2);
@@ -528,12 +507,9 @@ mod tests {
                     SAMPLE_FILES,
                     PROTEIN_FASTA_FILE,
                     Some(MODIFICATIONS_FILE),
-                    OUTPUT_DIRECTORY,
+                    &temporary_directory,
                 )
                 .unwrap();
-
-            fs::remove_file(WT_WFLW_FILE).unwrap();
-            fs::remove_file(LDT_WFLW_FILE).unwrap();
 
             sleep_until_elapsed_ms(instant, 230);
 
@@ -582,15 +558,14 @@ mod tests {
         };
 
         unsafe { with_test_path(SLOW_PATH, test_code) }
-
-        fs::remove_dir_all(WT_RESULT_DIRECTORY).unwrap();
-        fs::remove_dir_all(LDT_RESULT_DIRECTORY).unwrap();
-        fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
     }
 
     #[test]
-    #[serial]
+    // NOTE: It's a test, so I think this is alright for now
+    #[allow(clippy::too_many_lines)]
     fn reconfigure_when_stopped() {
+        let temporary_directory = tempdir().unwrap();
+
         // First, queue an initial couple of `Job`s
         let mut queue = Queue::new(1, Duration::from_millis(60)).unwrap();
 
@@ -601,12 +576,10 @@ mod tests {
                     SAMPLE_FILES,
                     PROTEIN_FASTA_FILE,
                     Some(MODIFICATIONS_FILE),
-                    OUTPUT_DIRECTORY,
+                    &temporary_directory,
                 )
                 .unwrap();
         }
-
-        fs::remove_file(WFLW_FILE).unwrap();
 
         assert!(!queue.running());
         assert_eq!(queue.worker_pool.available_workers(), 1);
@@ -689,12 +662,9 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
-                OUTPUT_DIRECTORY,
+                &temporary_directory,
             )
             .unwrap();
-
-        fs::remove_file(WT_WFLW_FILE).unwrap();
-        fs::remove_file(LDT_WFLW_FILE).unwrap();
 
         // Run the queue again, making sure that our changes were applied and that `Job` history is retained
         let test_code = || {
@@ -791,15 +761,12 @@ mod tests {
         queue.clear_jobs().unwrap();
 
         assert!(job_statuses(&queue).is_empty());
-
-        fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
-        fs::remove_dir_all(WT_RESULT_DIRECTORY).unwrap();
-        fs::remove_dir_all(LDT_RESULT_DIRECTORY).unwrap();
     }
 
     #[test]
-    #[serial]
     fn stop() {
+        let temporary_directory = tempdir().unwrap();
+
         // First, queue some initial `Job`s
         let queue = Queue::new(2, Duration::from_millis(20)).unwrap();
 
@@ -809,7 +776,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
-                OUTPUT_DIRECTORY,
+                &temporary_directory,
             )
             .unwrap();
 
@@ -819,13 +786,9 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
-                OUTPUT_DIRECTORY,
+                &temporary_directory,
             )
             .unwrap();
-
-        fs::remove_file(WFLW_FILE).unwrap();
-        fs::remove_file(WT_WFLW_FILE).unwrap();
-        fs::remove_file(LDT_WFLW_FILE).unwrap();
 
         assert!(!queue.running());
         assert_eq!(queue.worker_pool.available_workers(), 2);
@@ -882,16 +845,16 @@ mod tests {
         };
 
         unsafe { with_test_path(FAST_PATH, test_code) }
-
-        fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
-        fs::remove_dir_all(WT_RESULT_DIRECTORY).unwrap();
-        fs::remove_dir_all(LDT_RESULT_DIRECTORY).unwrap();
     }
 
     #[test]
-    #[serial]
+    // NOTE: It's a test, so I think this is alright for now
+    #[allow(clippy::too_many_lines)]
+    // NOTE: Implementing the suggestions here lead to the test not compiling
     #[allow(clippy::significant_drop_tightening)]
     fn on_update_callback() {
+        let temporary_directory = tempdir().unwrap();
+
         // First, set up a `Queue` with a debugging / logging callback
         let queue = Arc::new(RwLock::new(
             Queue::new(3, Duration::from_millis(10)).unwrap(),
@@ -920,7 +883,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
-                OUTPUT_DIRECTORY,
+                &temporary_directory,
             )
             .unwrap();
 
@@ -938,16 +901,12 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
-                OUTPUT_DIRECTORY,
+                &temporary_directory,
             )
             .unwrap();
 
         thread::park_timeout(timeout);
         assert!(start.elapsed() < Duration::from_millis(75));
-
-        fs::remove_file(WT_WFLW_FILE).unwrap();
-        fs::remove_file(LDT_WFLW_FILE).unwrap();
-        fs::remove_file(WFLW_FILE).unwrap();
 
         assert!(!queue.running());
 
@@ -999,7 +958,7 @@ mod tests {
                     SAMPLE_FILES,
                     PROTEIN_FASTA_FILE,
                     Some(MODIFICATIONS_FILE),
-                    OUTPUT_DIRECTORY,
+                    &temporary_directory,
                 )
                 .unwrap();
 
@@ -1036,9 +995,5 @@ mod tests {
                 [Status::Queued, Status::Queued],
             ]
         ));
-
-        fs::remove_dir_all(WT_RESULT_DIRECTORY).unwrap();
-        fs::remove_dir_all(LDT_RESULT_DIRECTORY).unwrap();
-        fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
     }
 }

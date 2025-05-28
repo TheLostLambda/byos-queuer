@@ -228,7 +228,7 @@ pub(crate) mod tests {
 
     use const_format::formatc;
     use serde_json::json;
-    use serial_test::serial;
+    use tempfile::tempdir;
 
     use super::*;
 
@@ -236,12 +236,27 @@ pub(crate) mod tests {
     pub const SAMPLE_FILES: [&str; 2] = ["tests/data/WT.raw", "tests/data/6ldt.raw"];
     pub const PROTEIN_FASTA_FILE: &str = "tests/data/proteins.fasta";
     pub const MODIFICATIONS_FILE: &str = "tests/data/modifications.txt";
-    pub const OUTPUT_DIRECTORY: &str = "tests/data/output";
 
     pub const WORKFLOW_NAME: &str = "PG Monomers (WT, 6ldt; proteins.fasta; modifications.txt)";
-    pub const RESULT_DIRECTORY: &str = formatc!("{OUTPUT_DIRECTORY}/{WORKFLOW_NAME}");
-    pub const WFLW_FILE: &str = formatc!("{RESULT_DIRECTORY}.wflw");
 
+    pub fn result_directory_in(temporary_directory: impl AsRef<Path>) -> PathBuf {
+        temporary_directory.as_ref().join(WORKFLOW_NAME)
+    }
+
+    pub fn wflw_file_in(temporary_directory: impl AsRef<Path>) -> PathBuf {
+        // TODO: Keep an eye on https://github.com/rust-lang/rust/issues/127292 for a better way to do this...
+        let mut result_directory = result_directory_in(temporary_directory).into_os_string();
+        result_directory.push(".wflw");
+        PathBuf::from(result_directory)
+    }
+
+    pub fn result_file_in(temporary_directory: impl AsRef<Path>) -> PathBuf {
+        result_directory_in(temporary_directory).join("Result")
+    }
+
+    // SAFETY: It's unsafe for multiple threads to call `env::set_var()`, but given I'm using cargo-nextest which
+    // launches each test as its own process, it should be alright... Honestly, even if it does result in unsafe
+    // behaviour, these are just tests, so I don't reckon it can do too much damage...
     pub unsafe fn with_test_path<T>(path: impl AsRef<Path>, test_code: impl FnOnce() -> T) -> T {
         // TODO: Use `cfg` to change this to `;` on Windows!
         const PATH_SEPARATOR: &str = ":";
@@ -268,10 +283,11 @@ pub(crate) mod tests {
 
     const PROTEIN_TXT_FILE: &str = "tests/data/proteins.txt";
 
-    const REFERENCE_WFLW_FILE: &str = formatc!("{OUTPUT_DIRECTORY}/Reference {WORKFLOW_NAME}.wflw");
+    const REFERENCE_WFLW_FILE: &str = formatc!("tests/data/output/Reference {WORKFLOW_NAME}.wflw");
 
-    const RESULT_FILE: &str = formatc!("{RESULT_DIRECTORY}/Result");
-    const LOG_FILE: &str = formatc!("{RESULT_DIRECTORY}/log.txt");
+    fn log_file_in(temporary_directory: impl AsRef<Path>) -> PathBuf {
+        result_directory_in(temporary_directory).join("log.txt")
+    }
 
     // TODO: To get these tests working on Windows, I think I'll need to create `scripts/windows` and `scripts/unix`
     // directories and use conditional compilation to set `TEST_SCRIPTS` accordingly!
@@ -282,44 +298,42 @@ pub(crate) mod tests {
     }
 
     #[test]
-    #[serial]
     fn new_then_run() {
+        let temporary_directory = tempdir().unwrap();
+        let wflw_file = wflw_file_in(&temporary_directory);
+        let result_directory = result_directory_in(&temporary_directory);
+        let log_file = log_file_in(&temporary_directory);
+        let result_file = result_file_in(&temporary_directory);
+
         // Test that .wflw file is created and matches reference output
-        let _ = fs::remove_file(WFLW_FILE);
-        assert!(!Path::new(WFLW_FILE).exists());
+        assert!(!wflw_file.exists());
 
         let workflow = Workflow::new(
             BASE_WORKFLOW,
             SAMPLE_FILES,
             PROTEIN_FASTA_FILE,
             Some(MODIFICATIONS_FILE),
-            OUTPUT_DIRECTORY,
+            &temporary_directory,
         )
         .unwrap();
 
-        assert!(Path::new(WFLW_FILE).exists());
+        assert!(&wflw_file.exists());
 
-        let workflow_json = load_wflw_json(WFLW_FILE);
+        let workflow_json = load_wflw_json(&wflw_file);
         let reference_workflow_json = load_wflw_json(REFERENCE_WFLW_FILE);
 
         assert_eq!(workflow_json, reference_workflow_json);
 
-        fs::remove_file(WFLW_FILE).unwrap();
-
         // Test that the returned `Workflow` has the correct `name` and `launch_command`
         assert_eq!(workflow.name(), WORKFLOW_NAME);
 
-        let _ = fs::remove_dir_all(RESULT_DIRECTORY);
-        assert!(!Path::new(RESULT_DIRECTORY).exists());
+        assert!(!result_directory.exists());
 
-        // SAFETY: It's unsafe for multiple threads to call `env::set_var()`, but given I'm only calling
-        // `with_test_path()` in tests marked `#[serial]`, it should be alright... Honestly, even if it does result in
-        // unsafe behaviour, these are just tests, so I don't reckon it can do too much damage...
         let handle = unsafe { with_test_path(TEST_PATH, || workflow.start()) }.unwrap();
         let output = handle.wait();
         assert!(output.is_ok());
 
-        let merged_output = fs::read_to_string(LOG_FILE).unwrap();
+        let merged_output = fs::read_to_string(log_file).unwrap();
         let mut lines = merged_output.lines();
 
         let executable_path = Path::new(lines.next().unwrap());
@@ -327,18 +341,16 @@ pub(crate) mod tests {
         assert!(executable_path.ends_with(Workflow::BYOS_EXE));
         assert_eq!(lines.next(), Some("--mode=create-project"));
         assert_eq!(lines.next(), Some("--input"));
-        assert_eq!(lines.next(), Some(WFLW_FILE));
+        assert_eq!(lines.next(), Some(wflw_file.to_str().unwrap()));
         assert_eq!(lines.next(), Some("--output"));
-        let result_file = Path::new(lines.next().unwrap());
-        assert!(result_file.is_absolute());
-        assert!(result_file.ends_with(RESULT_FILE));
+        let result_file_path = Path::new(lines.next().unwrap());
+        assert!(result_file_path.is_absolute());
+        assert!(result_file_path.ends_with(result_file));
 
         // Make sure that `Workflow`s can be re-run without panicking
         let handle = unsafe { with_test_path(TEST_PATH, || workflow.start()) }.unwrap();
         let output = handle.wait();
         assert!(output.is_ok());
-
-        fs::remove_dir_all(RESULT_DIRECTORY).unwrap();
     }
 
     #[test]
