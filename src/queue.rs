@@ -23,18 +23,15 @@ pub struct Queue {
     jobs: Jobs,
     worker_pool: WorkerPool,
     stagger_timer: StaggerTimer,
-    on_update: OnUpdateCallback,
+    on_update: Option<OnUpdateCallback>,
 }
 
 impl Queue {
-    pub fn new(
-        workers: usize,
-        stagger_duration: Duration,
-        on_update: OnUpdateCallback,
-    ) -> Result<Self> {
+    pub fn new(workers: usize, stagger_duration: Duration) -> Result<Self> {
         let jobs = Arc::new(RwLock::new(Vec::new()));
         let worker_pool = WorkerPool::new(workers)?;
         let stagger_timer = Self::stagger_timer(stagger_duration)?;
+        let on_update = None;
 
         Ok(Self {
             jobs,
@@ -58,6 +55,14 @@ impl Queue {
         self.stagger_timer = Self::stagger_timer(stagger_duration)?;
 
         Ok(())
+    }
+
+    pub fn set_on_update(&mut self, on_update: OnUpdateCallback) -> Result<()> {
+        self.set_optional_on_update(Some(on_update))
+    }
+
+    pub fn clear_on_update(&mut self) -> Result<()> {
+        self.set_optional_on_update(None)
     }
 
     pub fn clear_jobs(&self) -> Result<()> {
@@ -196,6 +201,22 @@ impl Queue {
         Ok(())
     }
 
+    fn set_optional_on_update(&mut self, on_update: Option<OnUpdateCallback>) -> Result<()> {
+        self.error_if_running("set_optional_on_update")?;
+
+        self.on_update = on_update;
+
+        for job in &mut *self.jobs.write().unwrap() {
+            // SAFETY: If the `Queue` isn't running, then none of the `Arc<Job>`s should have a reference count greater
+            // than one; therefore, `Arc::get_mut()` should always succeed and the `.unwrap()` should never panic
+            Arc::get_mut(job)
+                .unwrap()
+                .set_on_update(self.on_update.clone());
+        }
+
+        Ok(())
+    }
+
     fn on_update(&self) {
         if let Some(on_update) = &self.on_update {
             on_update();
@@ -306,7 +327,7 @@ mod tests {
     #[test]
     #[serial]
     fn queue() {
-        let queue = Queue::new(1, Duration::default(), None).unwrap();
+        let queue = Queue::new(1, Duration::default()).unwrap();
 
         queue
             .queue(
@@ -335,7 +356,7 @@ mod tests {
     #[test]
     #[serial]
     fn queue_grouped() {
-        let queue = Queue::new(1, Duration::default(), None).unwrap();
+        let queue = Queue::new(1, Duration::default()).unwrap();
 
         queue
             .queue_grouped(
@@ -360,7 +381,7 @@ mod tests {
     #[serial]
     fn run_checking_staggering() {
         // First, queue some `Job`s
-        let queue = Queue::new(3, Duration::from_millis(10), None).unwrap();
+        let queue = Queue::new(3, Duration::from_millis(10)).unwrap();
 
         queue
             .queue(
@@ -471,7 +492,7 @@ mod tests {
     #[serial]
     fn run_checking_addition_to_running_queue() {
         // First, queue an initial `Job`
-        let queue = Queue::new(2, Duration::from_millis(100), None).unwrap();
+        let queue = Queue::new(2, Duration::from_millis(100)).unwrap();
 
         queue
             .queue_grouped(
@@ -571,7 +592,7 @@ mod tests {
     #[serial]
     fn reconfigure_when_stopped() {
         // First, queue an initial couple of `Job`s
-        let mut queue = Queue::new(1, Duration::from_millis(60), None).unwrap();
+        let mut queue = Queue::new(1, Duration::from_millis(60)).unwrap();
 
         for _ in 0..2 {
             queue
@@ -780,7 +801,7 @@ mod tests {
     #[serial]
     fn stop() {
         // First, queue some initial `Job`s
-        let queue = Queue::new(2, Duration::from_millis(20), None).unwrap();
+        let queue = Queue::new(2, Duration::from_millis(20)).unwrap();
 
         queue
             .queue_grouped(
@@ -873,7 +894,7 @@ mod tests {
     fn on_update_callback() {
         // First, set up a `Queue` with a debugging / logging callback
         let queue = Arc::new(RwLock::new(
-            Queue::new(3, Duration::from_millis(10), None).unwrap(),
+            Queue::new(3, Duration::from_millis(10)).unwrap(),
         ));
 
         let current_thread = thread::current();
@@ -890,14 +911,10 @@ mod tests {
             }
         });
 
-        queue.write().unwrap().on_update = Some(on_update);
-        let queue = queue.read().unwrap();
-
-        let timeout = Duration::from_millis(300);
-        let start = Instant::now();
-
-        // Then, actually queue some `Job`s
+        // Start by queueing a couple of `Job`s before setting the `on_update`
         queue
+            .read()
+            .unwrap()
             .queue(
                 BASE_WORKFLOW,
                 SAMPLE_FILES,
@@ -907,9 +924,14 @@ mod tests {
             )
             .unwrap();
 
-        thread::park_timeout(timeout);
-        assert!(start.elapsed() < Duration::from_millis(150));
+        // Then register the `on_update`
+        queue.write().unwrap().set_on_update(on_update).unwrap();
+        let queue = queue.read().unwrap();
 
+        let timeout = Duration::from_millis(300);
+        let start = Instant::now();
+
+        // And queue the rest of the `Job`s
         queue
             .queue_grouped(
                 BASE_WORKFLOW,
@@ -921,7 +943,7 @@ mod tests {
             .unwrap();
 
         thread::park_timeout(timeout);
-        assert!(start.elapsed() < Duration::from_millis(225));
+        assert!(start.elapsed() < Duration::from_millis(75));
 
         fs::remove_file(WT_WFLW_FILE).unwrap();
         fs::remove_file(LDT_WFLW_FILE).unwrap();
@@ -970,6 +992,19 @@ mod tests {
 
             thread::park_timeout(timeout);
             assert!(start.elapsed() < Duration::from_millis(95));
+
+            queue
+                .queue(
+                    BASE_WORKFLOW,
+                    SAMPLE_FILES,
+                    PROTEIN_FASTA_FILE,
+                    Some(MODIFICATIONS_FILE),
+                    OUTPUT_DIRECTORY,
+                )
+                .unwrap();
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(250));
         };
 
         unsafe { with_test_path(FAST_PATH, test_code) }
@@ -979,8 +1014,6 @@ mod tests {
         assert!(matches!(
             &updates[..],
             [
-                [Status::Queued],
-                [Status::Queued, Status::Queued],
                 [Status::Queued, Status::Queued, Status::Queued],
                 [Status::Running(..), Status::Queued, Status::Queued],
                 [Status::Running(..), Status::Running(..), Status::Queued],
@@ -999,6 +1032,8 @@ mod tests {
                 [Status::Queued, Status::Queued, Status::Completed(..)],
                 [Status::Queued, Status::Queued, Status::Queued],
                 [],
+                [Status::Queued],
+                [Status::Queued, Status::Queued],
             ]
         ));
 

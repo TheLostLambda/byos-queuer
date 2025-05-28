@@ -28,12 +28,12 @@ pub enum Status {
 pub struct Job {
     workflow: Workflow,
     status: Mutex<Status>,
-    on_update: OnUpdateCallback,
+    on_update: Option<OnUpdateCallback>,
 }
 
 impl Job {
     #[must_use]
-    pub fn new(workflow: Workflow, on_update: OnUpdateCallback) -> Self {
+    pub fn new(workflow: Workflow, on_update: Option<OnUpdateCallback>) -> Self {
         let status = Mutex::new(Status::default());
 
         Self {
@@ -41,6 +41,10 @@ impl Job {
             status,
             on_update,
         }
+    }
+
+    pub fn set_on_update(&mut self, on_update: Option<OnUpdateCallback>) {
+        self.on_update = on_update;
     }
 
     pub fn name(&self) -> &str {
@@ -112,7 +116,7 @@ impl Job {
 
 // Private Helper Code =================================================================================================
 
-pub(crate) type OnUpdateCallback = Option<Arc<dyn Fn() + Send + Sync>>;
+pub(crate) type OnUpdateCallback = Arc<dyn Fn() + Send + Sync>;
 
 impl Job {
     fn on_update(&self) {
@@ -239,7 +243,7 @@ mod tests {
             }
         });
 
-        job.write().unwrap().on_update = Some(on_update);
+        job.write().unwrap().set_on_update(Some(on_update));
 
         // Start the `Job` and make sure the callback is being invoked!
         thread::spawn({
