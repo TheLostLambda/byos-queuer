@@ -1,9 +1,17 @@
 use dioxus::prelude::*;
 
-use crate::components::job::Job;
+use crate::{STATE, components::job::Job};
 
 #[component]
 pub fn Jobs() -> Element {
+    use_hook(|| {
+        STATE
+            .lock()
+            .unwrap()
+            .set_on_update(schedule_update())
+            .unwrap();
+    });
+
     rsx! {
         h2 {
             class: "card-title",
@@ -11,9 +19,10 @@ pub fn Jobs() -> Element {
         }
         ol {
             class: "list bg-base-100 rounded-box shadow-md",
-            Job { name: "First Job" }
-            Job { name: "Second Job" }
-            Job { name: "Third Job" }
+
+            for (name, _) in STATE.lock().unwrap().jobs() {
+                Job { name }
+            }
         }
     }
 }

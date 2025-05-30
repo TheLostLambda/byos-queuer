@@ -1,7 +1,11 @@
 mod components;
 mod state;
 
-use std::{fs, time::Duration};
+use std::{
+    fs,
+    sync::{LazyLock, Mutex},
+    time::Duration,
+};
 
 use byos_queuer::queue::Queue;
 use color_eyre::Result;
@@ -17,35 +21,14 @@ const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 
 const INDEX_HTML: &str = include_str!("../index.html");
 
-#[component]
-fn App() -> Element {
-    rsx! {
-        document::Link { rel: "icon", href: FAVICON }
-        document::Stylesheet { href: TAILWIND_CSS }
+// FIXME: Get rid of all of this once it's not longer needed for testing!
+const BASE_WORKFLOW: &str = "tests/data/PG Monomers.wflw";
+const SAMPLE_FILES: [&str; 2] = ["tests/data/WT.raw", "tests/data/6ldt.raw"];
+const PROTEIN_FILE: &str = "tests/data/proteins.fasta";
+const MODIFICATIONS_FILE: Option<&str> = Some("tests/data/modifications.txt");
+const OUTPUT_DIRECTORY: &str = "/home/tll/Downloads/byos-queuer/";
 
-        Header {},
-
-        main {
-            class: "card w-full bg-base-100 shadow-sm",
-
-            div {
-                class: "flex flex-col card-body",
-                Jobs {}
-            }
-        }
-    }
-}
-
-fn main() -> Result<()> {
-    color_eyre::install()?;
-
-    // FIXME: Get rid of all of this once it's not longer needed for testing!
-    const BASE_WORKFLOW: &str = "tests/data/PG Monomers.wflw";
-    const SAMPLE_FILES: [&str; 2] = ["tests/data/WT.raw", "tests/data/6ldt.raw"];
-    const PROTEIN_FILE: &str = "tests/data/proteins.fasta";
-    const MODIFICATIONS_FILE: Option<&str> = Some("tests/data/modifications.txt");
-    const OUTPUT_DIRECTORY: &str = "/home/tll/Downloads/byos-queuer/";
-
+pub static STATE: LazyLock<Mutex<Queue>> = LazyLock::new(|| {
     let _ = fs::remove_dir_all(OUTPUT_DIRECTORY);
     fs::create_dir(OUTPUT_DIRECTORY).unwrap();
 
@@ -70,6 +53,31 @@ fn main() -> Result<()> {
             OUTPUT_DIRECTORY,
         )
         .unwrap();
+
+    Mutex::new(queue)
+});
+
+#[component]
+fn App() -> Element {
+    rsx! {
+        document::Link { rel: "icon", href: FAVICON }
+        document::Stylesheet { href: TAILWIND_CSS }
+
+        Header {},
+
+        main {
+            class: "card w-full bg-base-100 shadow-sm",
+
+            div {
+                class: "flex flex-col card-body",
+                Jobs {}
+            }
+        }
+    }
+}
+
+fn main() -> Result<()> {
+    color_eyre::install()?;
 
     dioxus::LaunchBuilder::new()
         .with_cfg(
