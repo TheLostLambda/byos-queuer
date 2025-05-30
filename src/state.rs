@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use dioxus::signals::Signal;
 
 #[derive(Clone, Default)]
-struct WorkflowSettings {
+struct State {
     base_workflow: Signal<PathBuf>,
     modifications_file: Signal<Option<PathBuf>>,
     protein_file: Signal<Option<PathBuf>>,
