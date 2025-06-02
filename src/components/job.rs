@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::components::{delete::Delete, reset::Reset};
+use crate::components::delete::Delete;
 
 #[component]
 pub fn Job(name: String) -> Element {
@@ -11,7 +11,6 @@ pub fn Job(name: String) -> Element {
                 class: "font-mono list-col-grow",
                 { name }
             }
-            Reset {}
             Delete {}
         }
     }
