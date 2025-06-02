@@ -5,11 +5,7 @@ use crate::{STATE, components::job::Job};
 #[component]
 pub fn Jobs() -> Element {
     use_hook(|| {
-        STATE
-            .lock()
-            .unwrap()
-            .set_on_update(schedule_update())
-            .unwrap();
+        STATE.lock().unwrap().set_on_update(schedule_update());
     });
 
     rsx! {

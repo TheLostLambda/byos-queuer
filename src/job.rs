@@ -1,6 +1,6 @@
 // Standard Library Imports
 use std::{
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
 
@@ -28,12 +28,12 @@ pub enum Status {
 pub struct Job {
     workflow: Workflow,
     status: Mutex<Status>,
-    on_update: Option<OnUpdateCallback>,
+    on_update: OnUpdate,
 }
 
 impl Job {
     #[must_use]
-    pub fn new(workflow: Workflow, on_update: Option<OnUpdateCallback>) -> Self {
+    pub fn new(workflow: Workflow, on_update: OnUpdate) -> Self {
         let status = Mutex::new(Status::default());
 
         Self {
@@ -41,10 +41,6 @@ impl Job {
             status,
             on_update,
         }
-    }
-
-    pub fn set_on_update(&mut self, on_update: Option<OnUpdateCallback>) {
-        self.on_update = on_update;
     }
 
     pub fn name(&self) -> &str {
@@ -116,11 +112,12 @@ impl Job {
 
 // Private Helper Code =================================================================================================
 
+pub(crate) type OnUpdate = Arc<RwLock<Option<OnUpdateCallback>>>;
 pub(crate) type OnUpdateCallback = Arc<dyn Fn() + Send + Sync>;
 
 impl Job {
     fn on_update(&self) {
-        if let Some(on_update) = &self.on_update {
+        if let Some(ref on_update) = *self.on_update.read().unwrap() {
             on_update();
         }
     }
@@ -166,7 +163,7 @@ mod tests {
         .unwrap();
 
         // Run a job that should complete sucessfully
-        let job = Arc::new(Job::new(workflow, None));
+        let job = Arc::new(Job::new(workflow, Arc::new(RwLock::new(None))));
 
         thread::spawn({
             let job = Arc::clone(&job);
@@ -230,11 +227,12 @@ mod tests {
         .unwrap();
 
         // Construct a `Job` with a callback
-        let job = Arc::new(RwLock::new(Job::new(workflow, None)));
+        let on_update = Arc::new(RwLock::new(None));
+        let job = Arc::new(RwLock::new(Job::new(workflow, Arc::clone(&on_update))));
 
         let current_thread = thread::current();
         let updates = Arc::new(Mutex::new(Vec::new()));
-        let on_update = Arc::new({
+        let on_update_callback = Arc::new({
             let updates = Arc::clone(&updates);
             let job = Arc::clone(&job);
             move || {
@@ -243,7 +241,7 @@ mod tests {
             }
         });
 
-        job.write().unwrap().set_on_update(Some(on_update));
+        *on_update.write().unwrap() = Some(on_update_callback);
 
         // Start the `Job` and make sure the callback is being invoked!
         thread::spawn({

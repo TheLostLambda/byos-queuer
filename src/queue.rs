@@ -12,7 +12,7 @@ use color_eyre::eyre::{OptionExt, Result, eyre};
 // Local Crate Imports
 use crate::{
     cancellable_timer::CancellableTimer,
-    job::{Job, OnUpdateCallback, Status},
+    job::{Job, OnUpdate, OnUpdateCallback, Status},
     worker_pool::WorkerPool,
     workflow::Workflow,
 };
@@ -23,7 +23,7 @@ pub struct Queue {
     jobs: Jobs,
     worker_pool: WorkerPool,
     stagger_timer: StaggerTimer,
-    on_update: Option<OnUpdateCallback>,
+    on_update: OnUpdate,
 }
 
 impl Queue {
@@ -31,7 +31,7 @@ impl Queue {
         let jobs = Arc::new(RwLock::new(Vec::new()));
         let worker_pool = WorkerPool::new(workers)?;
         let stagger_timer = Self::stagger_timer(stagger_duration)?;
-        let on_update = None;
+        let on_update = Arc::new(RwLock::new(None));
 
         Ok(Self {
             jobs,
@@ -57,12 +57,12 @@ impl Queue {
         Ok(())
     }
 
-    pub fn set_on_update(&mut self, on_update: OnUpdateCallback) -> Result<()> {
-        self.set_optional_on_update(Some(on_update))
+    pub fn set_on_update(&self, on_update: OnUpdateCallback) {
+        *self.on_update.write().unwrap() = Some(on_update);
     }
 
-    pub fn clear_on_update(&mut self) -> Result<()> {
-        self.set_optional_on_update(None)
+    pub fn clear_on_update(&self) {
+        *self.on_update.write().unwrap() = None;
     }
 
     pub fn clear_jobs(&self) -> Result<()> {
@@ -201,24 +201,8 @@ impl Queue {
         Ok(())
     }
 
-    fn set_optional_on_update(&mut self, on_update: Option<OnUpdateCallback>) -> Result<()> {
-        self.error_if_running("set_optional_on_update")?;
-
-        self.on_update = on_update;
-
-        for job in &mut *self.jobs.write().unwrap() {
-            // SAFETY: If the `Queue` isn't running, then none of the `Arc<Job>`s should have a reference count greater
-            // than one; therefore, `Arc::get_mut()` should always succeed and the `.unwrap()` should never panic
-            Arc::get_mut(job)
-                .unwrap()
-                .set_on_update(self.on_update.clone());
-        }
-
-        Ok(())
-    }
-
     fn on_update(&self) {
-        if let Some(on_update) = &self.on_update {
+        if let Some(ref on_update) = *self.on_update.read().unwrap() {
             on_update();
         }
     }
@@ -888,7 +872,7 @@ mod tests {
             .unwrap();
 
         // Then register the `on_update`
-        queue.write().unwrap().set_on_update(on_update).unwrap();
+        queue.write().unwrap().set_on_update(on_update);
         let queue = queue.read().unwrap();
 
         let timeout = Duration::from_millis(300);
