@@ -35,7 +35,7 @@ pub static STATE: LazyLock<Mutex<Queue>> = LazyLock::new(|| {
     let queue = Queue::new(2, Duration::from_millis(1000)).unwrap();
 
     queue
-        .queue(
+        .queue_jobs(
             BASE_WORKFLOW,
             SAMPLE_FILES,
             PROTEIN_FILE,
@@ -45,7 +45,7 @@ pub static STATE: LazyLock<Mutex<Queue>> = LazyLock::new(|| {
         .unwrap();
 
     queue
-        .queue_grouped(
+        .queue_grouped_job(
             BASE_WORKFLOW,
             SAMPLE_FILES,
             PROTEIN_FILE,

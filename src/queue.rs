@@ -94,7 +94,7 @@ impl Queue {
             .collect()
     }
 
-    pub fn queue(
+    pub fn queue_jobs(
         &self,
         base_workflow: impl AsRef<Path> + Copy,
         sample_files: impl IntoIterator<Item = impl AsRef<Path>> + Copy,
@@ -103,7 +103,7 @@ impl Queue {
         output_directory: impl AsRef<Path> + Copy,
     ) -> Result<()> {
         for sample_file in sample_files {
-            self.queue_grouped(
+            self.queue_grouped_job(
                 base_workflow,
                 &[sample_file],
                 protein_file,
@@ -115,7 +115,7 @@ impl Queue {
         Ok(())
     }
 
-    pub fn queue_grouped(
+    pub fn queue_grouped_job(
         &self,
         base_workflow: impl AsRef<Path> + Copy,
         sample_files: impl IntoIterator<Item = impl AsRef<Path>> + Copy,
@@ -322,7 +322,7 @@ mod tests {
         let queue = Queue::new(1, Duration::default()).unwrap();
 
         queue
-            .queue(
+            .queue_jobs(
                 BASE_WORKFLOW,
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
@@ -348,7 +348,7 @@ mod tests {
         let queue = Queue::new(1, Duration::default()).unwrap();
 
         queue
-            .queue_grouped(
+            .queue_grouped_job(
                 BASE_WORKFLOW,
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
@@ -372,7 +372,7 @@ mod tests {
         let queue = Queue::new(3, Duration::from_millis(10)).unwrap();
 
         queue
-            .queue(
+            .queue_jobs(
                 BASE_WORKFLOW,
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
@@ -382,7 +382,7 @@ mod tests {
             .unwrap();
 
         queue
-            .queue_grouped(
+            .queue_grouped_job(
                 BASE_WORKFLOW,
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
@@ -476,7 +476,7 @@ mod tests {
         let queue = Queue::new(2, Duration::from_millis(100)).unwrap();
 
         queue
-            .queue_grouped(
+            .queue_grouped_job(
                 BASE_WORKFLOW,
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
@@ -502,7 +502,7 @@ mod tests {
 
             let instant = Instant::now();
             queue
-                .queue(
+                .queue_jobs(
                     BASE_WORKFLOW,
                     SAMPLE_FILES,
                     PROTEIN_FASTA_FILE,
@@ -571,7 +571,7 @@ mod tests {
 
         for _ in 0..2 {
             queue
-                .queue_grouped(
+                .queue_grouped_job(
                     BASE_WORKFLOW,
                     SAMPLE_FILES,
                     PROTEIN_FASTA_FILE,
@@ -657,7 +657,7 @@ mod tests {
         queue.set_stagger_duration(Duration::default()).unwrap();
 
         queue
-            .queue(
+            .queue_jobs(
                 BASE_WORKFLOW,
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
@@ -771,7 +771,7 @@ mod tests {
         let queue = Queue::new(2, Duration::from_millis(20)).unwrap();
 
         queue
-            .queue_grouped(
+            .queue_grouped_job(
                 BASE_WORKFLOW,
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
@@ -781,7 +781,7 @@ mod tests {
             .unwrap();
 
         queue
-            .queue(
+            .queue_jobs(
                 BASE_WORKFLOW,
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
@@ -878,7 +878,7 @@ mod tests {
         queue
             .read()
             .unwrap()
-            .queue(
+            .queue_jobs(
                 BASE_WORKFLOW,
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
@@ -896,7 +896,7 @@ mod tests {
 
         // And queue the rest of the `Job`s
         queue
-            .queue_grouped(
+            .queue_grouped_job(
                 BASE_WORKFLOW,
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
@@ -953,7 +953,7 @@ mod tests {
             assert!(start.elapsed() < Duration::from_millis(95));
 
             queue
-                .queue(
+                .queue_jobs(
                     BASE_WORKFLOW,
                     SAMPLE_FILES,
                     PROTEIN_FASTA_FILE,
