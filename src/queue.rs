@@ -65,6 +65,7 @@ impl Queue {
         *self.on_update.write().unwrap() = None;
     }
 
+    // TODO: Allow this to be run when the `Queue` is running. Make sure to start by cancelling the `StaggerTimer`!
     pub fn clear_jobs(&self) -> Result<()> {
         self.error_if_running("clear_jobs")?;
 
@@ -74,6 +75,7 @@ impl Queue {
         Ok(())
     }
 
+    // TODO: Allow this to be run when the `Queue` is running. Make sure to start by cancelling the `StaggerTimer`!
     pub fn reset_jobs(&self) -> Result<()> {
         self.error_if_running("reset_jobs")?;
 
@@ -92,6 +94,34 @@ impl Queue {
             .iter()
             .map(|job| (job.name().to_owned(), job.status()))
             .collect()
+    }
+
+    pub fn remove_job(&self, index: usize) -> Result<()> {
+        // NOTE: We need to hold this lock open to ensure that the length of the list cannot be changed between the
+        // bounds-check and the actual call to `.remove()`, otherwise a panic is possible
+        let mut jobs_guard = self.jobs.write().unwrap();
+
+        let jobs_len = jobs_guard.len();
+        let removed_job = if index < jobs_len {
+            jobs_guard.remove(index)
+        } else {
+            return Err(eyre!(
+                "tried to remove `Job` {index}, but there are only {jobs_len} `Job`s in the `Queue`"
+            ));
+        };
+        drop(jobs_guard);
+
+        if let Status::Running(handle, _) = removed_job.status() {
+            // NOTE: Killing this running `Job` will result its status being set to `Failed(..)`, which will trigger
+            // an `on_update()` call; consequentially, we don't need to call `self.on_update()` a second time in this
+            // branch. Because this `Queue` and all of its jobs share a single `on_update` `Arc<Mutex<...>>`, `Job` will
+            // always invoke the exact same callback as we would have by calling `self.on_update()`
+            handle.kill()?;
+        } else {
+            self.on_update();
+        }
+
+        Ok(())
     }
 
     pub fn queue_jobs(
@@ -781,7 +811,7 @@ mod tests {
             [Status::Queued, Status::Queued, Status::Queued]
         ));
 
-        // Then, run the queue and add some more `Job`s whilst it's running!
+        // Then, run the queue and stop it whilst it's running!
         let test_code = || {
             queue.run().unwrap();
 
@@ -826,6 +856,106 @@ mod tests {
                 &job_statuses(&queue)[..],
                 [Status::Completed(..), Status::Queued, Status::Queued]
             ));
+        };
+
+        unsafe { with_test_path(FAST_PATH, test_code) }
+    }
+
+    #[test]
+    fn remove_job() {
+        let temporary_directory = tempdir().unwrap();
+
+        // First, queue some `Job`s
+        let queue = Queue::new(2, Duration::from_millis(10)).unwrap();
+
+        queue
+            .queue_grouped_job(
+                BASE_WORKFLOW,
+                SAMPLE_FILES,
+                PROTEIN_FASTA_FILE,
+                Some(MODIFICATIONS_FILE),
+                &temporary_directory,
+            )
+            .unwrap();
+
+        queue
+            .queue_jobs(
+                BASE_WORKFLOW,
+                SAMPLE_FILES,
+                PROTEIN_FASTA_FILE,
+                Some(MODIFICATIONS_FILE),
+                &temporary_directory,
+            )
+            .unwrap();
+
+        assert!(!queue.running());
+        assert_eq!(queue.worker_pool.available_workers(), 2);
+        assert!(matches!(
+            &job_statuses(&queue)[..],
+            [Status::Queued, Status::Queued, Status::Queued]
+        ));
+
+        // Then, make sure `Job`s can be removed whilst it's running
+        // NOTE: It's a test, so I'm okay with the "complexity" here
+        #[expect(clippy::cognitive_complexity)]
+        let test_code = || {
+            queue.run().unwrap();
+
+            assert!(queue.running());
+
+            sleep_ms(5);
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert!(matches!(
+                &job_statuses(&queue)[..],
+                [Status::Running(..), Status::Queued, Status::Queued]
+            ));
+
+            queue.remove_job(1).unwrap();
+
+            assert!(queue.running());
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert!(matches!(
+                &job_statuses(&queue)[..],
+                [Status::Running(..), Status::Queued]
+            ));
+
+            sleep_ms(15);
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert!(matches!(
+                &job_statuses(&queue)[..],
+                [Status::Running(..), Status::Running(..)]
+            ));
+
+            queue.remove_job(0).unwrap();
+
+            assert!(queue.running());
+            assert!(matches!(&job_statuses(&queue)[..], [Status::Running(..)]));
+
+            sleep_ms(5);
+
+            assert_eq!(queue.worker_pool.available_workers(), 1);
+
+            sleep_ms(50);
+
+            assert_eq!(queue.worker_pool.available_workers(), 1);
+            assert!(matches!(&job_statuses(&queue)[..], [Status::Running(..)]));
+
+            sleep_ms(15);
+
+            assert_eq!(queue.worker_pool.available_workers(), 2);
+            assert!(matches!(&job_statuses(&queue)[..], [Status::Completed(..)]));
+
+            assert!(!queue.running());
+
+            queue.remove_job(0).unwrap();
+            assert!(matches!(&job_statuses(&queue)[..], []));
+
+            assert_eq!(
+                queue.remove_job(0).unwrap_err().to_string(),
+                "tried to remove `Job` 0, but there are only 0 `Job`s in the `Queue`"
+            );
         };
 
         unsafe { with_test_path(FAST_PATH, test_code) }
