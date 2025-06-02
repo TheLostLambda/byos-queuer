@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 use crate::components::delete::Delete;
 
 #[component]
-pub fn Job(name: String) -> Element {
+pub fn Job(index: usize, name: String) -> Element {
     rsx! {
         li {
             class: "list-row",
@@ -16,7 +16,7 @@ pub fn Job(name: String) -> Element {
                 class: "font-mono list-col-grow",
                 { name }
             }
-            Delete {}
+            Delete { index }
         }
     }
 }
