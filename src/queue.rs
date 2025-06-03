@@ -255,8 +255,6 @@ impl Queue {
     }
 
     fn worker(jobs: &Jobs, stagger_timer: &StaggerTimer) {
-        // NOTE: Keep an eye on https://github.com/rust-lang/rust-clippy/issues/12128, this is a false positive!
-        #[allow(clippy::significant_drop_tightening)]
         let next_job_staggered = || {
             let Some(timer_guard) = stagger_timer.wait() else {
                 // NOTE: If we *didn't* time out, then this `Queue` must have been cancelled — return `None` to break out
@@ -576,7 +574,7 @@ mod tests {
 
     #[test]
     // NOTE: It's a test, so I think this is alright for now
-    #[allow(clippy::too_many_lines)]
+    #[expect(clippy::too_many_lines)]
     fn reconfigure_when_stopped() {
         let temporary_directory = tempdir().unwrap();
 
@@ -963,9 +961,9 @@ mod tests {
 
     #[test]
     // NOTE: It's a test, so I think this is alright for now
-    #[allow(clippy::too_many_lines)]
+    #[expect(clippy::too_many_lines)]
     // NOTE: Implementing the suggestions here lead to the test not compiling
-    #[allow(clippy::significant_drop_tightening)]
+    #[expect(clippy::significant_drop_tightening)]
     fn on_update_callback() {
         let temporary_directory = tempdir().unwrap();
 

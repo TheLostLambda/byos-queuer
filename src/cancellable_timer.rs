@@ -65,7 +65,7 @@ pub struct TimerGuard<'a>(MutexGuard<'a, Instant>);
 impl TimerGuard<'_> {
     // NOTE: It's perfectly reasonable to use this method without using its return value (because of `self.0`s interior
     // mutability, this method *does* have side-effects)
-    #[allow(clippy::must_use_candidate)]
+    #[expect(clippy::must_use_candidate)]
     pub fn reset(mut self) -> Instant {
         *self.0 = Instant::now();
         *self.0
@@ -83,7 +83,9 @@ mod tests {
     use super::*;
 
     #[test]
-    #[allow(clippy::significant_drop_tightening)]
+    // NOTE: We're showing off how the `guard` can be used to reset the timer after running — I want to hold onto it in
+    // a variable so that this example is a bit clearer!
+    #[expect(clippy::significant_drop_tightening)]
     fn wait_and_reset() {
         let start = Instant::now();
         let timer = CancellableTimer::new(start, Duration::from_millis(5));
@@ -110,7 +112,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::significant_drop_tightening)]
     fn cancel_timer() {
         let start = Instant::now();
         let timer = CancellableTimer::new(start, Duration::from_millis(10));
@@ -141,8 +142,7 @@ mod tests {
 
         // Timer refuses to wait whilst it's cancelled
         let start = Instant::now();
-        let guard = timer.wait();
-        assert!(guard.is_none());
+        assert!(timer.wait().is_none());
         assert!(start.elapsed() < Duration::from_micros(5));
 
         // But the timer can be resumed / uncancelled
