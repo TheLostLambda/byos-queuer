@@ -41,7 +41,7 @@ impl CancellableTimer {
         *self.cancelled.lock().unwrap() = false;
     }
 
-    pub fn wait(&self) -> Option<TimerGuard> {
+    pub fn wait(&self) -> Option<TimerGuard<'_>> {
         let start_lock = self.start.lock().unwrap();
         let elapsed = start_lock.elapsed();
         let duration_to_go = self.duration.saturating_sub(elapsed);
