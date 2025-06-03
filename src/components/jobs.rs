@@ -16,8 +16,8 @@ pub fn Jobs() -> Element {
         ol {
             class: "list bg-base-100 rounded-box shadow-md",
 
-            for (index, (name, _)) in STATE.read().unwrap().jobs().into_iter().enumerate() {
-                Job { index, name }
+            for (index, (name, status)) in STATE.read().unwrap().jobs().into_iter().enumerate() {
+                Job { index, name, status }
             }
         }
     }
