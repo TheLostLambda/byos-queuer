@@ -41,6 +41,8 @@ impl Queue {
         })
     }
 
+    // Setters ---------------------------------------------------------------------------------------------------------
+
     pub fn set_workers(&mut self, workers: usize) -> Result<()> {
         self.error_if_running("set_workers")?;
 
@@ -65,26 +67,7 @@ impl Queue {
         *self.on_update.write().unwrap() = None;
     }
 
-    // TODO: Allow this to be run when the `Queue` is running. Make sure to start by cancelling the `StaggerTimer`!
-    pub fn clear_jobs(&self) -> Result<()> {
-        self.error_if_running("clear_jobs")?;
-
-        self.jobs.write().unwrap().clear();
-        self.on_update();
-
-        Ok(())
-    }
-
-    // TODO: Allow this to be run when the `Queue` is running. Make sure to start by cancelling the `StaggerTimer`!
-    pub fn reset_jobs(&self) -> Result<()> {
-        self.error_if_running("reset_jobs")?;
-
-        for job in self.jobs.read().unwrap().iter() {
-            job.reset()?;
-        }
-
-        Ok(())
-    }
+    // Getters ---------------------------------------------------------------------------------------------------------
 
     #[must_use]
     pub fn running(&self) -> bool {
@@ -101,33 +84,7 @@ impl Queue {
             .collect()
     }
 
-    pub fn remove_job(&self, index: usize) -> Result<()> {
-        // NOTE: We need to hold this lock open to ensure that the length of the list cannot be changed between the
-        // bounds-check and the actual call to `.remove()`, otherwise a panic is possible
-        let mut jobs_guard = self.jobs.write().unwrap();
-
-        let jobs_len = jobs_guard.len();
-        let removed_job = if index < jobs_len {
-            jobs_guard.remove(index)
-        } else {
-            return Err(eyre!(
-                "tried to remove `Job` {index}, but there are only {jobs_len} `Job`s in the `Queue`"
-            ));
-        };
-        drop(jobs_guard);
-
-        if let Status::Running(handle, _) = removed_job.status() {
-            // NOTE: Killing this running `Job` will result its status being set to `Failed(..)`, which will trigger
-            // an `on_update()` call; consequentially, we don't need to call `self.on_update()` a second time in this
-            // branch. Because this `Queue` and all of its jobs share a single `on_update` `Arc<Mutex<...>>`, `Job` will
-            // always invoke the exact same callback as we would have by calling `self.on_update()`
-            handle.kill()?;
-        } else {
-            self.on_update();
-        }
-
-        Ok(())
-    }
+    // Job Control -----------------------------------------------------------------------------------------------------
 
     pub fn queue_jobs(
         &self,
@@ -182,6 +139,36 @@ impl Queue {
         Ok(())
     }
 
+    pub fn remove_job(&self, index: usize) -> Result<()> {
+        // NOTE: We need to hold this lock open to ensure that the length of the list cannot be changed between the
+        // bounds-check and the actual call to `.remove()`, otherwise a panic is possible
+        let mut jobs_guard = self.jobs.write().unwrap();
+
+        let jobs_len = jobs_guard.len();
+        let removed_job = if index < jobs_len {
+            jobs_guard.remove(index)
+        } else {
+            return Err(eyre!(
+                "tried to remove `Job` {index}, but there are only {jobs_len} `Job`s in the `Queue`"
+            ));
+        };
+        drop(jobs_guard);
+
+        if let Status::Running(handle, _) = removed_job.status() {
+            // NOTE: Killing this running `Job` will result its status being set to `Failed(..)`, which will trigger
+            // an `on_update()` call; consequentially, we don't need to call `self.on_update()` a second time in this
+            // branch. Because this `Queue` and all of its jobs share a single `on_update` `Arc<Mutex<...>>`, `Job` will
+            // always invoke the exact same callback as we would have by calling `self.on_update()`
+            handle.kill()?;
+        } else {
+            self.on_update();
+        }
+
+        Ok(())
+    }
+
+    // Queue Control ---------------------------------------------------------------------------------------------------
+
     pub fn run(&self) -> Result<usize> {
         self.stagger_timer.resume();
 
@@ -205,6 +192,27 @@ impl Queue {
             if let Status::Running(..) = job.status() {
                 job.reset()?;
             }
+        }
+
+        Ok(())
+    }
+
+    // TODO: Allow this to be run when the `Queue` is running. Make sure to start by cancelling the `StaggerTimer`!
+    pub fn clear_jobs(&self) -> Result<()> {
+        self.error_if_running("clear_jobs")?;
+
+        self.jobs.write().unwrap().clear();
+        self.on_update();
+
+        Ok(())
+    }
+
+    // TODO: Allow this to be run when the `Queue` is running. Make sure to start by cancelling the `StaggerTimer`!
+    pub fn reset_jobs(&self) -> Result<()> {
+        self.error_if_running("reset_jobs")?;
+
+        for job in self.jobs.read().unwrap().iter() {
+            job.reset()?;
         }
 
         Ok(())
