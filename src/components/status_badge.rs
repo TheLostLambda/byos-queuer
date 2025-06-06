@@ -1,6 +1,8 @@
 use std::time::Duration;
 
 use dioxus::prelude::*;
+use futures_util::StreamExt;
+use tokio::time::timeout;
 
 use byos_queuer::job::Status;
 
@@ -9,6 +11,28 @@ pub(super) struct StatusProp(Status);
 
 #[component]
 pub fn StatusBadge(status: StatusProp) -> Element {
+    let update_timer = use_coroutine(|mut rx: UnboundedReceiver<Status>| async move {
+        let mut state = Status::default();
+
+        loop {
+            let message = if let Status::Running(_, instant) = state {
+                let duration_until_next_second =
+                    Duration::from_millis(1000 - u64::from(instant.elapsed().subsec_millis()));
+                timeout(duration_until_next_second, rx.next()).await
+            } else {
+                Ok(rx.next().await)
+            };
+
+            if let Ok(status) = message {
+                state = status.unwrap();
+            } else {
+                needs_update();
+            }
+        }
+    });
+
+    update_timer.send(status.0.clone());
+
     let (color_class, content, tooltip) = match status.0 {
         Status::Queued => ("badge-neutral", rsx! { "Queued" }, None),
         Status::Running(_, instant) => {
