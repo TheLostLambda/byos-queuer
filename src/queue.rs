@@ -87,6 +87,11 @@ impl Queue {
     }
 
     #[must_use]
+    pub fn running(&self) -> bool {
+        self.worker_pool.running()
+    }
+
+    #[must_use]
     pub fn jobs(&self) -> Vec<(String, Status)> {
         self.jobs
             .read()
@@ -235,10 +240,6 @@ impl Queue {
         if let Some(ref on_update) = *self.on_update.read().unwrap() {
             on_update();
         }
-    }
-
-    fn running(&self) -> bool {
-        self.worker_pool.running()
     }
 
     fn cancelled(&self) -> bool {
