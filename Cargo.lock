@@ -302,7 +302,6 @@ dependencies = [
  "const_format",
  "dioxus",
  "duct",
- "futures-util",
  "indoc",
  "seq_io",
  "serde_json",

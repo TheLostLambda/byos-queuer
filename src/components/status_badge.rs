@@ -1,56 +1,31 @@
-use std::time::Duration;
-
 use dioxus::prelude::*;
-use futures_util::StreamExt;
-use tokio::time::timeout;
 
 use byos_queuer::job::Status;
+
+use crate::components::run_timer::RunTime;
 
 #[derive(Clone)]
 pub(super) struct StatusProp(Status);
 
 #[component]
 pub fn StatusBadge(status: StatusProp) -> Element {
-    let update_timer = use_coroutine(|mut rx: UnboundedReceiver<Status>| async move {
-        let mut state = Status::default();
-
-        loop {
-            let message = if let Status::Running(_, instant) = state {
-                let duration_until_next_second =
-                    Duration::from_millis(1000 - u64::from(instant.elapsed().subsec_millis()));
-                timeout(duration_until_next_second, rx.next()).await
-            } else {
-                Ok(rx.next().await)
-            };
-
-            if let Ok(status) = message {
-                state = status.unwrap();
-            } else {
-                needs_update();
-            }
-        }
-    });
-
-    update_timer.send(status.0.clone());
-
     let (color_class, content, tooltip) = match status.0 {
         Status::Queued => ("badge-neutral", rsx! { "Queued" }, None),
-        Status::Running(_, instant) => {
-            let run_time = format_duration(instant.elapsed());
-            ("badge-info", rsx! { "Running ({run_time})" }, None)
-        }
-        Status::Completed(duration) => {
-            let run_time = format_duration(duration);
-            ("badge-success", rsx! { "Completed ({run_time})" }, None)
-        }
-        Status::Failed(report, duration) => {
-            let run_time = format_duration(duration);
-            (
-                "badge-warning",
-                rsx! { "Failed ({run_time})" },
-                Some(report.to_string()),
-            )
-        }
+        Status::Running(_, instant) => (
+            "badge-info",
+            rsx! { "Running ", RunTime { time: instant } },
+            None,
+        ),
+        Status::Completed(duration) => (
+            "badge-success",
+            rsx! { "Completed ", RunTime { time: duration } },
+            None,
+        ),
+        Status::Failed(report, duration) => (
+            "badge-warning",
+            rsx! { "Failed ", RunTime { time: duration } },
+            Some(report.to_string()),
+        ),
     };
 
     rsx! {
@@ -91,24 +66,4 @@ impl PartialEq for StatusProp {
             _ => false,
         }
     }
-}
-
-fn format_duration(duration: Duration) -> String {
-    let elapsed_seconds = duration.as_secs();
-    let seconds = elapsed_seconds % 60;
-    let minutes = (elapsed_seconds / 60) % 60;
-    let hours = (elapsed_seconds / 60) / 60;
-
-    let hours = if hours != 0 {
-        format!("{hours}h")
-    } else {
-        String::new()
-    };
-    let minutes = if minutes != 0 {
-        format!("{minutes}m")
-    } else {
-        String::new()
-    };
-
-    format!("{hours}{minutes}{seconds}s")
 }
