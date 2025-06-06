@@ -32,27 +32,29 @@ pub static STATE: LazyLock<RwLock<Queue>> = LazyLock::new(|| {
     let _ = fs::remove_dir_all(OUTPUT_DIRECTORY);
     fs::create_dir(OUTPUT_DIRECTORY).unwrap();
 
-    let queue = Queue::new(2, Duration::from_millis(1000)).unwrap();
+    let queue = Queue::new(2, Duration::from_millis(1500)).unwrap();
 
-    queue
-        .queue_jobs(
-            BASE_WORKFLOW,
-            SAMPLE_FILES,
-            PROTEIN_FILE,
-            MODIFICATIONS_FILE,
-            OUTPUT_DIRECTORY,
-        )
-        .unwrap();
+    for _ in 0..2 {
+        queue
+            .queue_jobs(
+                BASE_WORKFLOW,
+                SAMPLE_FILES,
+                PROTEIN_FILE,
+                MODIFICATIONS_FILE,
+                OUTPUT_DIRECTORY,
+            )
+            .unwrap();
 
-    queue
-        .queue_grouped_job(
-            BASE_WORKFLOW,
-            SAMPLE_FILES,
-            PROTEIN_FILE,
-            MODIFICATIONS_FILE,
-            OUTPUT_DIRECTORY,
-        )
-        .unwrap();
+        queue
+            .queue_grouped_job(
+                BASE_WORKFLOW,
+                SAMPLE_FILES,
+                PROTEIN_FILE,
+                MODIFICATIONS_FILE,
+                OUTPUT_DIRECTORY,
+            )
+            .unwrap();
+    }
 
     RwLock::new(queue)
 });

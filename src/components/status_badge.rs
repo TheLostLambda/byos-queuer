@@ -31,7 +31,7 @@ pub fn StatusBadge(status: StatusProp) -> Element {
 
     rsx! {
         div {
-            class: "tooltip tooltip-left badge {color_class}",
+            class: "tooltip tooltip-left badge {color_class} font-mono",
 
             div {
                 class: "tooltip-content",
