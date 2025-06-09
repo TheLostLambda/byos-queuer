@@ -204,12 +204,12 @@ impl Queue {
         Ok(())
     }
 
-    // TODO: Allow this to be run when the `Queue` is running. Make sure to start by cancelling the `StaggerTimer`!
     pub fn reset(&self) -> Result<()> {
-        self.error_if_running("reset")?;
-
         for job in self.jobs.read().unwrap().iter() {
             job.reset()?;
+            // NOTE: Resetting a `Job` effectively re-queues it — just like ordinary queuing, this re-queuing might
+            // require spawning a new worker
+            self.spawn_worker_if_running();
         }
 
         Ok(())
@@ -653,10 +653,6 @@ mod tests {
                 queue.clear().unwrap_err().to_string(),
                 "the `Queue` must be stopped to `clear()`"
             );
-            assert_eq!(
-                queue.reset().unwrap_err().to_string(),
-                "the `Queue` must be stopped to `reset()`"
-            );
 
             sleep_ms(20);
 
@@ -740,10 +736,6 @@ mod tests {
             assert_eq!(
                 queue.clear().unwrap_err().to_string(),
                 "the `Queue` must be stopped to `clear()`"
-            );
-            assert_eq!(
-                queue.reset().unwrap_err().to_string(),
-                "the `Queue` must be stopped to `reset()`"
             );
 
             sleep_ms(30);
@@ -1056,6 +1048,25 @@ mod tests {
             thread::park_timeout(timeout);
             assert!(start.elapsed() < Duration::from_millis(25));
 
+            assert!(queue.running());
+
+            queue.reset().unwrap();
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(5));
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(5));
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(15));
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(15));
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(25));
+
             thread::park_timeout(timeout);
             assert!(start.elapsed() < Duration::from_millis(25));
 
@@ -1099,6 +1110,17 @@ mod tests {
         assert!(matches!(
             &updates[..],
             [
+                [Status::Queued, Status::Queued, Status::Queued],
+                [Status::Running(..), Status::Queued, Status::Queued],
+                [Status::Running(..), Status::Running(..), Status::Queued],
+                [
+                    Status::Running(..),
+                    Status::Running(..),
+                    Status::Running(..)
+                ],
+                [Status::Failed(..), Status::Running(..), Status::Running(..)],
+                [Status::Queued, Status::Running(..), Status::Running(..)],
+                [Status::Queued, Status::Queued, Status::Running(..)],
                 [Status::Queued, Status::Queued, Status::Queued],
                 [Status::Running(..), Status::Queued, Status::Queued],
                 [Status::Running(..), Status::Running(..), Status::Queued],
