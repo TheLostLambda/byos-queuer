@@ -1103,6 +1103,12 @@ mod tests {
             thread::park_timeout(timeout);
             assert!(start.elapsed() < Duration::from_millis(5));
 
+            queue.remove_job(0).unwrap();
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(5));
+            assert!(queue.running());
+
             queue.clear().unwrap();
 
             thread::park_timeout(timeout);
@@ -1149,6 +1155,7 @@ mod tests {
                 [Status::Queued],
                 [Status::Queued, Status::Queued],
                 [Status::Running(..), Status::Queued],
+                [Status::Queued],
                 [],
             ]
         ));
