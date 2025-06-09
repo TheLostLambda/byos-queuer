@@ -191,11 +191,14 @@ impl Queue {
         Ok(())
     }
 
-    // TODO: Allow this to be run when the `Queue` is running. Make sure to start by cancelling the `StaggerTimer`!
     pub fn clear(&self) -> Result<()> {
-        self.error_if_running("clear")?;
+        self.stagger_timer.cancel();
 
-        self.jobs.write().unwrap().clear();
+        for job in self.jobs.write().unwrap().drain(..) {
+            // NOTE: This will ensure that any still-running, `.drain()`ed `Job`s are quietly killed
+            job.quiet_reset()?;
+        }
+
         self.on_update();
 
         Ok(())
@@ -648,10 +651,6 @@ mod tests {
                     .to_string(),
                 "the `Queue` must be stopped to `set_stagger_duration()`"
             );
-            assert_eq!(
-                queue.clear().unwrap_err().to_string(),
-                "the `Queue` must be stopped to `clear()`"
-            );
 
             sleep_ms(20);
 
@@ -731,10 +730,6 @@ mod tests {
                     .unwrap_err()
                     .to_string(),
                 "the `Queue` must be stopped to `set_stagger_duration()`"
-            );
-            assert_eq!(
-                queue.clear().unwrap_err().to_string(),
-                "the `Queue` must be stopped to `clear()`"
             );
 
             sleep_ms(30);
@@ -1100,6 +1095,22 @@ mod tests {
 
             thread::park_timeout(timeout);
             assert!(start.elapsed() < Duration::from_millis(150));
+
+            queue.run().unwrap();
+
+            assert!(queue.running());
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(5));
+
+            queue.clear().unwrap();
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(5));
+
+            sleep_ms(5);
+
+            assert!(!queue.running());
         };
 
         unsafe { with_test_path(FAST_PATH, test_code) }
@@ -1137,6 +1148,8 @@ mod tests {
                 [],
                 [Status::Queued],
                 [Status::Queued, Status::Queued],
+                [Status::Running(..), Status::Queued],
+                [],
             ]
         ));
     }
