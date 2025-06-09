@@ -198,8 +198,8 @@ impl Queue {
     }
 
     // TODO: Allow this to be run when the `Queue` is running. Make sure to start by cancelling the `StaggerTimer`!
-    pub fn clear_jobs(&self) -> Result<()> {
-        self.error_if_running("clear_jobs")?;
+    pub fn clear(&self) -> Result<()> {
+        self.error_if_running("clear")?;
 
         self.jobs.write().unwrap().clear();
         self.on_update();
@@ -208,8 +208,8 @@ impl Queue {
     }
 
     // TODO: Allow this to be run when the `Queue` is running. Make sure to start by cancelling the `StaggerTimer`!
-    pub fn reset_jobs(&self) -> Result<()> {
-        self.error_if_running("reset_jobs")?;
+    pub fn reset(&self) -> Result<()> {
+        self.error_if_running("reset")?;
 
         for job in self.jobs.read().unwrap().iter() {
             job.reset()?;
@@ -643,12 +643,12 @@ mod tests {
                 "the `Queue` must be stopped to `set_stagger_duration()`"
             );
             assert_eq!(
-                queue.clear_jobs().unwrap_err().to_string(),
-                "the `Queue` must be stopped to `clear_jobs()`"
+                queue.clear().unwrap_err().to_string(),
+                "the `Queue` must be stopped to `clear()`"
             );
             assert_eq!(
-                queue.reset_jobs().unwrap_err().to_string(),
-                "the `Queue` must be stopped to `reset_jobs()`"
+                queue.reset().unwrap_err().to_string(),
+                "the `Queue` must be stopped to `reset()`"
             );
 
             sleep_ms(20);
@@ -731,12 +731,12 @@ mod tests {
                 "the `Queue` must be stopped to `set_stagger_duration()`"
             );
             assert_eq!(
-                queue.clear_jobs().unwrap_err().to_string(),
-                "the `Queue` must be stopped to `clear_jobs()`"
+                queue.clear().unwrap_err().to_string(),
+                "the `Queue` must be stopped to `clear()`"
             );
             assert_eq!(
-                queue.reset_jobs().unwrap_err().to_string(),
-                "the `Queue` must be stopped to `reset_jobs()`"
+                queue.reset().unwrap_err().to_string(),
+                "the `Queue` must be stopped to `reset()`"
             );
 
             sleep_ms(30);
@@ -767,7 +767,7 @@ mod tests {
             ]
         ));
 
-        queue.reset_jobs().unwrap();
+        queue.reset().unwrap();
 
         assert!(matches!(
             &job_statuses(&queue)[..],
@@ -779,7 +779,7 @@ mod tests {
             ]
         ));
 
-        queue.clear_jobs().unwrap();
+        queue.clear().unwrap();
 
         assert!(job_statuses(&queue).is_empty());
     }
@@ -1063,12 +1063,12 @@ mod tests {
 
             assert!(!queue.running());
 
-            queue.reset_jobs().unwrap();
+            queue.reset().unwrap();
 
             thread::park_timeout(timeout);
             assert!(start.elapsed() < Duration::from_millis(90));
 
-            queue.clear_jobs().unwrap();
+            queue.clear().unwrap();
 
             thread::park_timeout(timeout);
             assert!(start.elapsed() < Duration::from_millis(95));
