@@ -53,18 +53,26 @@ impl Job {
     }
 
     pub fn reset(&self) -> Result<()> {
-        let prereset_status = self.status();
-        *self.status.lock().unwrap() = Status::default();
-
-        match prereset_status {
-            Status::Queued => return Ok(()),
-            Status::Running(handle, _) => handle.kill()?,
-            _ => (),
+        if matches!(self.status(), Status::Queued) {
+            return Ok(());
         }
+
+        self.quiet_reset()?;
 
         // NOTE: If we've made it here, we can be certain that `status` has changed and that we need to signal an
         // update — if the `Job` was already `Queued`, then we would have returned early!
         self.on_update();
+
+        Ok(())
+    }
+
+    pub fn quiet_reset(&self) -> Result<()> {
+        let prereset_status = self.status();
+        *self.status.lock().unwrap() = Status::default();
+
+        if let Status::Running(handle, _) = prereset_status {
+            handle.kill()?;
+        }
 
         Ok(())
     }
@@ -279,9 +287,14 @@ pub(crate) mod tests {
         thread::park_timeout(timeout);
         assert!(start.elapsed() < Duration::from_millis(15));
 
+        job.read().unwrap().reset().unwrap();
+
+        thread::park_timeout(timeout);
+        assert!(start.elapsed() < Duration::from_millis(5));
+
         assert!(matches!(
             updates.lock().unwrap()[..],
-            [Status::Running(..), Status::Completed(..)]
+            [Status::Running(..), Status::Completed(..), Status::Queued]
         ));
     }
 }

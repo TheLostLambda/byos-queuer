@@ -151,15 +151,10 @@ impl Queue {
         };
         drop(jobs_guard);
 
-        if let Status::Running(handle, _) = removed_job.status() {
-            // NOTE: Killing this running `Job` will result its status being set to `Failed(..)`, which will trigger
-            // an `on_update()` call; consequentially, we don't need to call `self.on_update()` a second time in this
-            // branch. Because this `Queue` and all of its jobs share a single `on_update` `Arc<Mutex<...>>`, `Job` will
-            // always invoke the exact same callback as we would have by calling `self.on_update()`
-            handle.kill()?;
-        } else {
-            self.on_update();
-        }
+        // NOTE: This kills any `removed_job`s that were still running
+        removed_job.quiet_reset()?;
+
+        self.on_update();
 
         Ok(())
     }
@@ -187,9 +182,11 @@ impl Queue {
 
         for job in self.jobs.read().unwrap().iter() {
             if let Status::Running(..) = job.status() {
-                job.reset()?;
+                job.quiet_reset()?;
             }
         }
+
+        self.on_update();
 
         Ok(())
     }
@@ -206,11 +203,13 @@ impl Queue {
 
     pub fn reset(&self) -> Result<()> {
         for job in self.jobs.read().unwrap().iter() {
-            job.reset()?;
+            job.quiet_reset()?;
             // NOTE: Resetting a `Job` effectively re-queues it — just like ordinary queuing, this re-queuing might
             // require spawning a new worker
             self.spawn_worker_if_running();
         }
+
+        self.on_update();
 
         Ok(())
     }
@@ -1119,8 +1118,6 @@ mod tests {
                     Status::Running(..)
                 ],
                 [Status::Failed(..), Status::Running(..), Status::Running(..)],
-                [Status::Queued, Status::Running(..), Status::Running(..)],
-                [Status::Queued, Status::Queued, Status::Running(..)],
                 [Status::Queued, Status::Queued, Status::Queued],
                 [Status::Running(..), Status::Queued, Status::Queued],
                 [Status::Running(..), Status::Running(..), Status::Queued],
@@ -1136,7 +1133,6 @@ mod tests {
                     Status::Completed(..)
                 ],
                 [Status::Failed(..), Status::Queued, Status::Completed(..)],
-                [Status::Queued, Status::Queued, Status::Completed(..)],
                 [Status::Queued, Status::Queued, Status::Queued],
                 [],
                 [Status::Queued],
