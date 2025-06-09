@@ -69,11 +69,7 @@ fn App() -> Element {
 
         main {
             class: "card w-full bg-base-100 shadow-sm",
-
-            div {
-                class: "flex flex-col card-body",
-                Jobs {}
-            }
+            Jobs {}
         }
     }
 }
@@ -89,8 +85,6 @@ fn main() -> Result<()> {
     unsafe {
         env::set_var("PATH", joined_path);
     }
-
-    STATE.read().unwrap().run().unwrap();
 
     // FIXME: End of block to kill
 
