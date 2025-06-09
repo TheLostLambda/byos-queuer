@@ -66,17 +66,6 @@ impl Job {
         Ok(())
     }
 
-    pub fn quiet_reset(&self) -> Result<()> {
-        let prereset_status = self.status();
-        *self.status.lock().unwrap() = Status::default();
-
-        if let Status::Running(handle, _) = prereset_status {
-            handle.kill()?;
-        }
-
-        Ok(())
-    }
-
     pub fn run(&self) -> Result<()> {
         self.start()?;
         self.wait();
@@ -124,6 +113,17 @@ pub(crate) type OnUpdate = Arc<RwLock<Option<OnUpdateCallback>>>;
 pub(crate) type OnUpdateCallback = Arc<dyn Fn() + Send + Sync>;
 
 impl Job {
+    pub(crate) fn quiet_reset(&self) -> Result<()> {
+        let prereset_status = self.status();
+        *self.status.lock().unwrap() = Status::default();
+
+        if let Status::Running(handle, _) = prereset_status {
+            handle.kill()?;
+        }
+
+        Ok(())
+    }
+
     fn on_update(&self) {
         if let Some(ref on_update) = *self.on_update.read().unwrap() {
             on_update();
