@@ -129,12 +129,9 @@ impl Queue {
             .push(Arc::new(Job::new(workflow, self.on_update.clone())));
         self.on_update();
 
-        if self.running() && !self.cancelled() {
-            // NOTE: `WorkerPool.spawn()` will check if there is room in the pool for another worker, if there isn't,
-            // then it will return an `Err`. We don't actually mind this outcome, so just discard the `Result` with a
-            // `let _ = ...` binding.
-            let _ = self.spawn_workers(1);
-        }
+        // NOTE: If the `Queue` is already running, but isn't at its maximum worker capacity yet, then a new worker may
+        // need spawning — this method does nothing if the `Queue` is stopped or already at its maximum worker capacity.
+        self.spawn_worker_if_running();
 
         Ok(())
     }
@@ -261,6 +258,15 @@ impl Queue {
         self.worker_pool.spawn(new_workers, move || {
             Self::worker(&jobs, &stagger_timer);
         })
+    }
+
+    fn spawn_worker_if_running(&self) {
+        if self.running() && !self.cancelled() {
+            // NOTE: `WorkerPool.spawn()` will check if there is room in the pool for another worker, if there isn't,
+            // then it will return an `Err`. We don't actually mind this outcome, so just discard the `Result` with a
+            // `let _ = ...` binding.
+            let _ = self.spawn_workers(1);
+        }
     }
 
     fn worker(jobs: &Jobs, stagger_timer: &StaggerTimer) {
