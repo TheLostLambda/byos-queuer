@@ -161,7 +161,7 @@ impl Queue {
 
     // Queue Control ---------------------------------------------------------------------------------------------------
 
-    pub fn run(&self) -> Result<usize> {
+    pub fn run(&self) -> Result<()> {
         self.stagger_timer.resume();
 
         let queued_jobs = self
@@ -174,7 +174,9 @@ impl Queue {
         let available_workers = self.worker_pool.available_workers();
         let new_workers = cmp::min(queued_jobs, available_workers);
 
-        self.spawn_workers(new_workers)
+        self.spawn_workers(new_workers)?;
+
+        Ok(())
     }
 
     pub fn cancel(&self) -> Result<()> {
@@ -253,13 +255,15 @@ impl Queue {
         self.stagger_timer.cancelled()
     }
 
-    fn spawn_workers(&self, new_workers: usize) -> Result<usize> {
+    fn spawn_workers(&self, new_workers: usize) -> Result<()> {
         let jobs = Arc::clone(&self.jobs);
         let stagger_timer = Arc::clone(&self.stagger_timer);
 
         self.worker_pool.spawn(new_workers, move || {
             Self::worker(&jobs, &stagger_timer);
-        })
+        })?;
+
+        Ok(())
     }
 
     fn spawn_worker_if_running(&self) {
