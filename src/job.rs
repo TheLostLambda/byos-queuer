@@ -126,7 +126,7 @@ impl Job {
 // Unit Tests ==========================================================================================================
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::{sync::RwLock, thread};
 
     use tempfile::tempdir;
@@ -145,6 +145,25 @@ mod tests {
     // `tests/scripts/unix` at compile time
     const COMPLETES_PATH: &str = "tests/scripts/job-completes";
     const FAILS_PATH: &str = "tests/scripts/job-fails";
+
+    pub struct IntervalInstant(Instant);
+
+    impl IntervalInstant {
+        pub fn now() -> Self {
+            Self(Instant::now())
+        }
+
+        // NOTE: The "resetting" of the `Instant` to `Instant::now()` means that `IntervalInstant.elapsed()` gives the
+        // elapsed `Duration` since the `IntervalInstant`'s creation *or* the last call to `IntervalInstant.elapsed()`.
+        // This means tests can make assertions about interval `Duration`s without repeatedly calling `Instant::now()`
+        // or relying on brittle running totals of the elapsed time (which make it difficult to insert new steps into
+        // the middle of an existing test)
+        pub fn elapsed(&mut self) -> Duration {
+            let result = self.0.elapsed();
+            *self = Self::now();
+            result
+        }
+    }
 
     #[test]
     fn new_then_run() {
@@ -252,7 +271,7 @@ mod tests {
         });
 
         let timeout = Duration::from_millis(100);
-        let start = Instant::now();
+        let mut start = IntervalInstant::now();
 
         thread::park_timeout(timeout);
         assert!(start.elapsed() < Duration::from_millis(5));

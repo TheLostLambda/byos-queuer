@@ -310,6 +310,7 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::{
+        job::tests::IntervalInstant,
         worker_pool::tests::sleep_ms,
         workflow::tests::{
             BASE_WORKFLOW, MODIFICATIONS_FILE, PROTEIN_FASTA_FILE, SAMPLE_FILES, WORKFLOW_NAME,
@@ -1013,7 +1014,7 @@ mod tests {
         let queue = queue.read().unwrap();
 
         let timeout = Duration::from_millis(300);
-        let start = Instant::now();
+        let mut start = IntervalInstant::now();
 
         // And queue the rest of the `Job`s
         queue
@@ -1037,27 +1038,25 @@ mod tests {
 
             assert!(queue.running());
 
-            let start = Instant::now();
-
             thread::park_timeout(timeout);
             assert!(start.elapsed() < Duration::from_millis(5));
 
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(20));
+            assert!(start.elapsed() < Duration::from_millis(15));
 
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(35));
+            assert!(start.elapsed() < Duration::from_millis(15));
 
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(55));
+            assert!(start.elapsed() < Duration::from_millis(25));
 
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(75));
+            assert!(start.elapsed() < Duration::from_millis(25));
 
             queue.cancel().unwrap();
 
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(80));
+            assert!(start.elapsed() < Duration::from_millis(5));
 
             sleep_ms(5);
 
@@ -1066,12 +1065,12 @@ mod tests {
             queue.reset().unwrap();
 
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(90));
+            assert!(start.elapsed() < Duration::from_millis(10));
 
             queue.clear().unwrap();
 
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(95));
+            assert!(start.elapsed() < Duration::from_millis(5));
 
             queue
                 .queue_jobs(
@@ -1084,7 +1083,7 @@ mod tests {
                 .unwrap();
 
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(250));
+            assert!(start.elapsed() < Duration::from_millis(150));
         };
 
         unsafe { with_test_path(FAST_PATH, test_code) }
