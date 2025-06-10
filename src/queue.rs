@@ -315,8 +315,9 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::{
+        assert_unpark_within_ms,
         job::StatusDiscriminant::{self, *},
-        worker_pool::tests::{IntervalInstant, sleep_ms},
+        worker_pool::tests::sleep_ms,
         workflow::tests::{
             BASE_WORKFLOW, MODIFICATIONS_FILE, PROTEIN_FASTA_FILE, SAMPLE_FILES, WORKFLOW_NAME,
             with_test_path,
@@ -866,9 +867,6 @@ mod tests {
         // Then register the `on_update`
         queue.set_on_update(on_update);
 
-        let timeout = Duration::from_millis(300);
-        let mut start = IntervalInstant::now();
-
         // Next, make sure updates roll in incrementally!
         let test_code = || {
             // `queue.queue_grouped_job()` -----------------------------------------------------------------------------
@@ -883,73 +881,47 @@ mod tests {
                 )
                 .unwrap();
 
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(75));
+            assert_unpark_within_ms!(75);
 
             // `queue.run()` -------------------------------------------------------------------------------------------
 
             queue.run().unwrap();
 
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(1));
-
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(5));
-
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(15));
-
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(15));
-
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(25));
+            assert_unpark_within_ms!(1);
+            assert_unpark_within_ms!(5);
+            assert_unpark_within_ms!(15);
+            assert_unpark_within_ms!(15);
+            assert_unpark_within_ms!(25);
 
             // `queue.reset()` -----------------------------------------------------------------------------------------
 
             queue.reset().unwrap();
 
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(5));
-
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(5));
-
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(15));
-
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(15));
-
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(25));
-
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(25));
+            assert_unpark_within_ms!(1);
+            assert_unpark_within_ms!(5);
+            assert_unpark_within_ms!(15);
+            assert_unpark_within_ms!(15);
+            assert_unpark_within_ms!(25);
+            assert_unpark_within_ms!(25);
 
             // `queue.cancel()` ----------------------------------------------------------------------------------------
 
             queue.cancel().unwrap();
 
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(5));
-
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(1));
+            assert_unpark_within_ms!(1);
+            assert_unpark_within_ms!(1);
 
             // `queue.reset()` -----------------------------------------------------------------------------------------
 
             queue.reset().unwrap();
 
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(1));
+            assert_unpark_within_ms!(1);
 
             // `queue.clear()` -----------------------------------------------------------------------------------------
 
             queue.clear().unwrap();
 
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(1));
+            assert_unpark_within_ms!(1);
 
             // `queue.queue_jobs()` ------------------------------------------------------------------------------------
 
@@ -966,35 +938,27 @@ mod tests {
             // FIXME: We're missing an unpark here — I assume because the two unparks at too quick and one is lost. The
             // solution is changing the `queue_*` methods to just call `on_update()` once, no matter the number of added
             // `Job`s!
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(75));
+            assert_unpark_within_ms!(75);
 
             // `queue.run()` -------------------------------------------------------------------------------------------
 
             queue.run().unwrap();
 
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(1));
-
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(5));
+            assert_unpark_within_ms!(1);
+            assert_unpark_within_ms!(5);
 
             // `queue.remove_job()` ------------------------------------------------------------------------------------
 
             queue.remove_job(0).unwrap();
 
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(5));
+            assert_unpark_within_ms!(1);
 
             // `queue.clear()` -----------------------------------------------------------------------------------------
 
             queue.clear().unwrap();
 
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(1));
-
-            thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(5));
+            assert_unpark_within_ms!(1);
+            assert_unpark_within_ms!(5);
         };
 
         unsafe { with_test_path(FAST_PATH, test_code) }

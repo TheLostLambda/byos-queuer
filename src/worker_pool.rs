@@ -103,23 +103,17 @@ pub(crate) mod tests {
         thread::sleep(Duration::from_millis(millis));
     }
 
-    pub struct IntervalInstant(Instant);
-
-    impl IntervalInstant {
-        pub fn now() -> Self {
-            Self(Instant::now())
-        }
-
-        // NOTE: The "resetting" of the `Instant` to `Instant::now()` means that `IntervalInstant.elapsed()` gives the
-        // elapsed `Duration` since the `IntervalInstant`'s creation *or* the last call to `IntervalInstant.elapsed()`.
-        // This means tests can make assertions about interval `Duration`s without repeatedly calling `Instant::now()`
-        // or relying on brittle running totals of the elapsed time (which make it difficult to insert new steps into
-        // the middle of an existing test)
-        pub fn elapsed(&mut self) -> Duration {
-            let result = self.0.elapsed();
-            *self = Self::now();
-            result
-        }
+    #[macro_export]
+    macro_rules! assert_unpark_within_ms {
+        ($timeout:expr $(,)?) => {
+            let timeout = Duration::from_millis($timeout);
+            let park_start = Instant::now();
+            thread::park_timeout(timeout);
+            assert!(
+                park_start.elapsed() < timeout,
+                "the thread did not unpark within {timeout:?}"
+            );
+        };
     }
 
     #[test]
@@ -196,14 +190,9 @@ pub(crate) mod tests {
         on_update.set(on_update_callback);
 
         // Start the `WorkerPool` and make sure the callback is being invoked!
-        let timeout = Duration::from_millis(100);
-        let mut start = IntervalInstant::now();
-
-        // Start the `WorkerPool`, add to it, then let it finish
         let active_workers = worker_pool.spawn(5, || sleep_ms(5)).unwrap();
 
-        thread::park_timeout(timeout);
-        assert!(start.elapsed() < Duration::from_millis(1));
+        assert_unpark_within_ms!(1);
         assert!(worker_pool.running());
         assert_eq!(worker_pool.available_workers(), 1);
         assert_eq!(active_workers, 5);
@@ -214,8 +203,7 @@ pub(crate) mod tests {
         assert_eq!(worker_pool.available_workers(), 0);
         assert_eq!(active_workers, 6);
 
-        thread::park_timeout(timeout);
-        assert!(start.elapsed() < Duration::from_millis(6));
+        assert_unpark_within_ms!(6);
         assert!(!worker_pool.running());
         assert_eq!(worker_pool.available_workers(), 6);
 
@@ -229,8 +217,7 @@ pub(crate) mod tests {
         // Start the `WorkerPool` again, but don't let it finish before checking `updates`
         let active_workers = worker_pool.spawn(2, || sleep_ms(5)).unwrap();
 
-        thread::park_timeout(timeout);
-        assert!(start.elapsed() < Duration::from_millis(1));
+        assert_unpark_within_ms!(1);
         assert!(worker_pool.running());
         assert_eq!(worker_pool.available_workers(), 4);
         assert_eq!(active_workers, 2);
@@ -238,8 +225,7 @@ pub(crate) mod tests {
         assert_eq!(updates.lock().unwrap()[..], [true, false, true]);
 
         // Let the `WorkerPool` finish and then check `updates` again
-        thread::park_timeout(timeout);
-        assert!(start.elapsed() < Duration::from_millis(6));
+        assert_unpark_within_ms!(6);
 
         assert_eq!(updates.lock().unwrap()[..], [true, false, true, false]);
     }

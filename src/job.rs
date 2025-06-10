@@ -152,7 +152,8 @@ pub(crate) mod tests {
     use tempfile::tempdir;
 
     use crate::{
-        worker_pool::tests::{IntervalInstant, sleep_ms},
+        assert_unpark_within_ms,
+        worker_pool::tests::sleep_ms,
         workflow::tests::{
             BASE_WORKFLOW, MODIFICATIONS_FILE, PROTEIN_FASTA_FILE, SAMPLE_FILES, result_file_in,
             wflw_file_in, with_test_path,
@@ -276,19 +277,12 @@ pub(crate) mod tests {
             }
         });
 
-        let timeout = Duration::from_millis(100);
-        let mut start = IntervalInstant::now();
-
-        thread::park_timeout(timeout);
-        assert!(start.elapsed() < Duration::from_millis(5));
-
-        thread::park_timeout(timeout);
-        assert!(start.elapsed() < Duration::from_millis(15));
+        assert_unpark_within_ms!(5);
+        assert_unpark_within_ms!(15);
 
         job.reset().unwrap();
 
-        thread::park_timeout(timeout);
-        assert!(start.elapsed() < Duration::from_millis(5));
+        assert_unpark_within_ms!(1);
 
         assert_eq!(updates.lock().unwrap()[..], [Running, Completed, Queued]);
     }
