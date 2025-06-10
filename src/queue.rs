@@ -77,6 +77,18 @@ impl Queue {
     }
 
     #[must_use]
+    pub fn ready(&self) -> bool {
+        let there_is_a_queued_job = self
+            .jobs
+            .read()
+            .unwrap()
+            .iter()
+            .any(|job| matches!(job.status(), Status::Queued));
+
+        !self.running() && there_is_a_queued_job
+    }
+
+    #[must_use]
     pub fn jobs(&self) -> Vec<(String, Status)> {
         self.jobs
             .read()
@@ -429,6 +441,8 @@ mod tests {
         // First, queue some `Job`s
         let queue = Queue::new(3, Duration::from_millis(10)).unwrap();
 
+        assert!(!queue.ready());
+
         queue
             .queue_jobs(
                 BASE_WORKFLOW,
@@ -450,6 +464,7 @@ mod tests {
             .unwrap();
 
         assert!(!queue.running());
+        assert!(queue.ready());
 
         let expected_job_names = [WT_WORKFLOW_NAME, LDT_WORKFLOW_NAME, WORKFLOW_NAME];
         let jobs = queue.jobs();
@@ -488,6 +503,7 @@ mod tests {
             assert_eq!(job_statuses(&queue), [Failed, Completed, Completed]);
 
             assert!(!queue.running());
+            assert!(!queue.ready());
         };
 
         unsafe { with_test_path(FAST_PATH, test_code) }
@@ -704,7 +720,7 @@ mod tests {
     }
 
     #[test]
-    fn stop() {
+    fn cancel() {
         let temporary_directory = tempdir().unwrap();
 
         // First, queue some initial `Job`s
@@ -760,6 +776,7 @@ mod tests {
             sleep_ms(5);
 
             assert!(!queue.running());
+            assert!(queue.ready());
             assert!(queue.cancelled());
             assert_eq!(queue.worker_pool.available_workers(), 2);
             assert_eq!(job_statuses(&queue), [Completed, Queued, Queued]);
