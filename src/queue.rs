@@ -269,10 +269,6 @@ impl Queue {
         Ok(())
     }
 
-    fn cancelled(&self) -> bool {
-        self.stagger_timer.cancelled()
-    }
-
     fn spawn_workers(&self, new_workers: usize) -> Result<()> {
         let jobs = Arc::clone(&self.jobs);
         let stagger_timer = Arc::clone(&self.stagger_timer);
@@ -293,11 +289,13 @@ impl Queue {
         }
     }
 
+    // -----------------------------------------------------------------------------------------------------------------
+
     fn worker(jobs: &Jobs, stagger_timer: &StaggerTimer) {
         let next_job_staggered = || {
             let Some(timer_guard) = stagger_timer.wait() else {
-                // NOTE: If we *didn't* time out, then this `Queue` must have been cancelled — return `None` to break out
-                // of the worker loop and shutdown the thread
+                // NOTE: If we *didn't* time out, then this `Queue` must have been cancelled — return `None` to break
+                // out of the worker loop and shutdown the thread
                 return None;
             };
 
@@ -318,6 +316,12 @@ impl Queue {
             job.wait();
         }
     }
+
+    fn cancelled(&self) -> bool {
+        self.stagger_timer.cancelled()
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
 
     fn next_job(jobs: &Jobs) -> Option<Arc<Job>> {
         jobs.read()
