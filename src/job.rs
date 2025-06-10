@@ -109,6 +109,27 @@ impl Job {
 
 // Private Helper Code =================================================================================================
 
+// NOTE: This is primarily useful for test code where I don't care about any of the `Status` fields, but I do need a
+// `PartialEq` implementation to use `assert_eq!(...)`
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub(crate) enum StatusDiscriminant {
+    Queued,
+    Running,
+    Completed,
+    Failed,
+}
+
+impl From<Status> for StatusDiscriminant {
+    fn from(value: Status) -> Self {
+        match value {
+            Status::Queued => Self::Queued,
+            Status::Running(..) => Self::Running,
+            Status::Completed(..) => Self::Completed,
+            Status::Failed(..) => Self::Failed,
+        }
+    }
+}
+
 impl Job {
     pub(crate) fn quiet_reset(&self) -> Result<()> {
         let prereset_status = self.status();
@@ -139,6 +160,7 @@ pub(crate) mod tests {
     };
 
     use super::*;
+    use StatusDiscriminant::*;
 
     pub struct IntervalInstant(Instant);
 
@@ -163,6 +185,10 @@ pub(crate) mod tests {
     // `tests/scripts/unix` at compile time
     const COMPLETES_PATH: &str = "tests/scripts/job-completes";
     const FAILS_PATH: &str = "tests/scripts/job-fails";
+
+    fn status(job: &Job) -> StatusDiscriminant {
+        StatusDiscriminant::from(job.status())
+    }
 
     #[test]
     fn new_then_run() {
@@ -192,11 +218,11 @@ pub(crate) mod tests {
 
         sleep_ms(5);
 
-        assert!(matches!(job.status(), Status::Running(..)));
+        assert_eq!(status(&job), Running);
 
         sleep_ms(20);
 
-        assert!(matches!(job.status(), Status::Completed(..)));
+        assert_eq!(status(&job), Completed);
         if let Status::Completed(run_time) = job.status() {
             assert!(Duration::from_millis(10) < run_time && run_time < Duration::from_millis(20));
         }
@@ -213,11 +239,11 @@ pub(crate) mod tests {
 
         sleep_ms(5);
 
-        assert!(matches!(job.status(), Status::Running(..)));
+        assert_eq!(status(&job), Running);
 
         sleep_ms(20);
 
-        assert!(matches!(job.status(), Status::Failed(..)));
+        assert_eq!(status(&job), Failed);
         if let Status::Failed(report, run_time) = job.status() {
             assert_eq!(
                 format!("{report:#}"),
@@ -254,7 +280,7 @@ pub(crate) mod tests {
             let updates = Arc::clone(&updates);
             let job = Arc::clone(&job);
             move || {
-                updates.lock().unwrap().push(job.status());
+                updates.lock().unwrap().push(status(&job));
                 current_thread.unpark();
             }
         });
@@ -283,9 +309,6 @@ pub(crate) mod tests {
         thread::park_timeout(timeout);
         assert!(start.elapsed() < Duration::from_millis(5));
 
-        assert!(matches!(
-            updates.lock().unwrap()[..],
-            [Status::Running(..), Status::Completed(..), Status::Queued]
-        ));
+        assert_eq!(updates.lock().unwrap()[..], [Running, Completed, Queued]);
     }
 }
