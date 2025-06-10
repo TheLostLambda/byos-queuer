@@ -29,10 +29,11 @@ pub struct Queue {
 
 impl Queue {
     pub fn new(workers: usize, stagger_duration: Duration) -> Result<Self> {
-        let jobs = Arc::new(RwLock::new(Vec::new()));
-        let worker_pool = WorkerPool::new(workers)?;
-        let stagger_timer = Self::stagger_timer(stagger_duration)?;
         let on_update = OnUpdate::new();
+
+        let jobs = Arc::new(RwLock::new(Vec::new()));
+        let worker_pool = WorkerPool::new(workers, on_update.clone())?;
+        let stagger_timer = Self::stagger_timer(stagger_duration)?;
 
         Ok(Self {
             jobs,
@@ -47,7 +48,7 @@ impl Queue {
     pub fn set_workers(&mut self, workers: usize) -> Result<()> {
         self.error_if_running("set_workers")?;
 
-        self.worker_pool = WorkerPool::new(workers)?;
+        self.worker_pool = WorkerPool::new(workers, self.on_update.clone())?;
 
         Ok(())
     }
@@ -846,7 +847,10 @@ mod tests {
             let updates = Arc::clone(&updates);
             let queue = Arc::clone(&queue);
             move || {
-                updates.lock().unwrap().push(job_statuses(&queue));
+                updates
+                    .lock()
+                    .unwrap()
+                    .push((job_statuses(&queue), queue.running()));
                 current_thread.unpark();
             }
         });
@@ -868,27 +872,29 @@ mod tests {
         let timeout = Duration::from_millis(300);
         let mut start = IntervalInstant::now();
 
-        // And queue the rest of the `Job`s
-        queue
-            .queue_grouped_job(
-                BASE_WORKFLOW,
-                SAMPLE_FILES,
-                PROTEIN_FASTA_FILE,
-                Some(MODIFICATIONS_FILE),
-                &temporary_directory,
-            )
-            .unwrap();
-
-        thread::park_timeout(timeout);
-        assert!(start.elapsed() < Duration::from_millis(75));
-
-        assert!(!queue.running());
-
         // Next, make sure updates roll in incrementally!
         let test_code = || {
+            // `queue.queue_grouped_job()` -----------------------------------------------------------------------------
+
+            queue
+                .queue_grouped_job(
+                    BASE_WORKFLOW,
+                    SAMPLE_FILES,
+                    PROTEIN_FASTA_FILE,
+                    Some(MODIFICATIONS_FILE),
+                    &temporary_directory,
+                )
+                .unwrap();
+
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(75));
+
+            // `queue.run()` -------------------------------------------------------------------------------------------
+
             queue.run().unwrap();
 
-            assert!(queue.running());
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(1));
 
             thread::park_timeout(timeout);
             assert!(start.elapsed() < Duration::from_millis(5));
@@ -902,7 +908,7 @@ mod tests {
             thread::park_timeout(timeout);
             assert!(start.elapsed() < Duration::from_millis(25));
 
-            assert!(queue.running());
+            // `queue.reset()` -----------------------------------------------------------------------------------------
 
             queue.reset().unwrap();
 
@@ -923,25 +929,32 @@ mod tests {
 
             thread::park_timeout(timeout);
             assert!(start.elapsed() < Duration::from_millis(25));
+
+            // `queue.cancel()` ----------------------------------------------------------------------------------------
 
             queue.cancel().unwrap();
 
             thread::park_timeout(timeout);
             assert!(start.elapsed() < Duration::from_millis(5));
 
-            sleep_ms(5);
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(1));
 
-            assert!(!queue.running());
+            // `queue.reset()` -----------------------------------------------------------------------------------------
 
             queue.reset().unwrap();
 
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(10));
+            assert!(start.elapsed() < Duration::from_millis(1));
+
+            // `queue.clear()` -----------------------------------------------------------------------------------------
 
             queue.clear().unwrap();
 
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(5));
+            assert!(start.elapsed() < Duration::from_millis(1));
+
+            // `queue.queue_jobs()` ------------------------------------------------------------------------------------
 
             queue
                 .queue_jobs(
@@ -953,57 +966,87 @@ mod tests {
                 )
                 .unwrap();
 
+            // FIXME: We're missing an unpark here — I assume because the two unparks at too quick and one is lost. The
+            // solution is changing the `queue_*` methods to just call `on_update()` once, no matter the number of added
+            // `Job`s!
             thread::park_timeout(timeout);
-            assert!(start.elapsed() < Duration::from_millis(150));
+            assert!(start.elapsed() < Duration::from_millis(75));
+
+            // `queue.run()` -------------------------------------------------------------------------------------------
 
             queue.run().unwrap();
 
-            assert!(queue.running());
+            thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(1));
 
             thread::park_timeout(timeout);
             assert!(start.elapsed() < Duration::from_millis(5));
+
+            // `queue.remove_job()` ------------------------------------------------------------------------------------
 
             queue.remove_job(0).unwrap();
 
             thread::park_timeout(timeout);
             assert!(start.elapsed() < Duration::from_millis(5));
-            assert!(queue.running());
+
+            // `queue.clear()` -----------------------------------------------------------------------------------------
 
             queue.clear().unwrap();
 
             thread::park_timeout(timeout);
+            assert!(start.elapsed() < Duration::from_millis(1));
+
+            thread::park_timeout(timeout);
             assert!(start.elapsed() < Duration::from_millis(5));
-
-            sleep_ms(5);
-
-            assert!(!queue.running());
         };
 
         unsafe { with_test_path(FAST_PATH, test_code) }
 
         let updates = updates.lock().unwrap();
-        let updates: Vec<_> = updates.iter().map(Vec::as_slice).collect();
-        let expected: &[&[StatusDiscriminant]] = &[
-            &[Queued, Queued, Queued],
-            &[Running, Queued, Queued],
-            &[Running, Running, Queued],
-            &[Running, Running, Running],
-            &[Failed, Running, Running],
-            &[Queued, Queued, Queued],
-            &[Running, Queued, Queued],
-            &[Running, Running, Queued],
-            &[Running, Running, Running],
-            &[Failed, Running, Running],
-            &[Failed, Running, Completed],
-            &[Failed, Queued, Completed],
-            &[Queued, Queued, Queued],
-            &[],
-            &[Queued],
-            &[Queued, Queued],
-            &[Running, Queued],
-            &[Queued],
-            &[],
+        let expected: &[(&[StatusDiscriminant], bool)] = &[
+            // `queue.queue_grouped_job()`
+            (&[Queued, Queued, Queued], false),
+            // `queue.run()`
+            (&[Queued, Queued, Queued], true),
+            (&[Running, Queued, Queued], true),
+            (&[Running, Running, Queued], true),
+            (&[Running, Running, Running], true),
+            (&[Failed, Running, Running], true),
+            // `queue.reset()`
+            (&[Queued, Queued, Queued], true),
+            (&[Running, Queued, Queued], true),
+            (&[Running, Running, Queued], true),
+            (&[Running, Running, Running], true),
+            (&[Failed, Running, Running], true),
+            (&[Failed, Running, Completed], true),
+            // `queue.cancel()`
+            (&[Failed, Queued, Completed], true),
+            (&[Failed, Queued, Completed], false),
+            // `queue.reset()`
+            (&[Queued, Queued, Queued], false),
+            // `queue.clear()`
+            (&[], false),
+            // `queue.queue_jobs()`
+            (&[Queued], false),
+            (&[Queued, Queued], false),
+            // `queue.run()`
+            (&[Queued, Queued], true),
+            (&[Running, Queued], true),
+            // `queue.remove_job()`
+            (&[Queued], true),
+            // `queue.clear()`
+            (&[], true),
+            (&[], false),
         ];
-        assert_eq!(updates, expected);
+
+        for (index, (update, &expected)) in updates
+            .iter()
+            .map(|(s, r)| (&s[..], *r))
+            .zip(expected)
+            .enumerate()
+        {
+            assert_eq!(update, expected, "comparison failed at index {index}");
+        }
+        assert_eq!(updates.len(), expected.len());
     }
 }

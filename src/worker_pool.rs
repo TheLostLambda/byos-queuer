@@ -10,16 +10,20 @@ use std::{
 // External Crate Imports
 use color_eyre::{Result, eyre::eyre};
 
+// Local Crate Imports
+use crate::on_update::OnUpdate;
+
 // Public API ==========================================================================================================
 
 #[derive(Debug)]
 pub struct WorkerPool {
     workers: Arc<AtomicUsize>,
     max_workers: usize,
+    on_update: OnUpdate,
 }
 
 impl WorkerPool {
-    pub fn new(max_workers: usize) -> Result<Self> {
+    pub fn new(max_workers: usize, on_update: OnUpdate) -> Result<Self> {
         if max_workers == 0 {
             return Err(eyre!("a `WorkerPool` must allow at least one worker"));
         }
@@ -29,6 +33,7 @@ impl WorkerPool {
         Ok(Self {
             workers,
             max_workers,
+            on_update,
         })
     }
 
@@ -47,7 +52,7 @@ impl WorkerPool {
         new_workers: usize,
         process: impl FnOnce() + Clone + Send + 'static,
     ) -> Result<usize> {
-        self.workers
+        let previous_workers = self.workers
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |mut workers| {
                 workers += new_workers;
                 (workers <= self.max_workers).then_some(workers)
@@ -56,12 +61,26 @@ impl WorkerPool {
                 eyre!("tried to launch {new_workers} new workers, but {workers} workers were already running \
                        and the maximum number of workers is {}", self.max_workers))?;
 
+        // NOTE: If we've gone from no workers to `self.running()`, then the `WorkerPool` has just been started and we
+        // should trigger an `on_update()`
+        if previous_workers == 0 && self.running() {
+            self.on_update.call();
+        }
+
         for _ in 0..new_workers {
             let workers = Arc::clone(&self.workers);
+            let on_update = self.on_update.clone();
             let process = process.clone();
             thread::spawn(move || {
                 process();
-                workers.fetch_sub(1, Ordering::Relaxed);
+
+                let previous_workers = workers.fetch_sub(1, Ordering::Relaxed);
+
+                // NOTE: If this thread was the only worker and is now closing, then the `WorkerPool` has just stopped
+                // and we should trigger an `on_update()`
+                if previous_workers == 1 {
+                    on_update.call();
+                }
             });
         }
 
@@ -73,7 +92,9 @@ impl WorkerPool {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use std::time::Duration;
+    use std::{sync::Mutex, time::Duration};
+
+    use crate::job::tests::IntervalInstant;
 
     use super::*;
 
@@ -83,25 +104,25 @@ pub(crate) mod tests {
 
     #[test]
     fn new() {
-        let worker_pool = WorkerPool::new(0);
+        let worker_pool = WorkerPool::new(0, OnUpdate::new());
         assert!(worker_pool.is_err());
         assert_eq!(
             worker_pool.unwrap_err().to_string(),
             "a `WorkerPool` must allow at least one worker"
         );
 
-        let worker_pool = WorkerPool::new(1).unwrap();
+        let worker_pool = WorkerPool::new(1, OnUpdate::new()).unwrap();
         assert!(!worker_pool.running());
         assert_eq!(worker_pool.available_workers(), 1);
 
-        let worker_pool = WorkerPool::new(6).unwrap();
+        let worker_pool = WorkerPool::new(6, OnUpdate::new()).unwrap();
         assert!(!worker_pool.running());
         assert_eq!(worker_pool.available_workers(), 6);
     }
 
     #[test]
     fn spawn() {
-        let worker_pool = WorkerPool::new(6).unwrap();
+        let worker_pool = WorkerPool::new(6, OnUpdate::new()).unwrap();
         assert!(!worker_pool.running());
         assert_eq!(worker_pool.available_workers(), 6);
 
@@ -133,5 +154,73 @@ pub(crate) mod tests {
 
         assert!(!worker_pool.running());
         assert_eq!(worker_pool.available_workers(), 6);
+    }
+
+    #[test]
+    fn on_update_callback() {
+        // Construct a `WorkerPool` with a callback
+        let on_update = OnUpdate::new();
+        let worker_pool = Arc::new(WorkerPool::new(6, on_update.clone()).unwrap());
+
+        let current_thread = thread::current();
+        let updates = Arc::new(Mutex::new(Vec::new()));
+        let on_update_callback = Arc::new({
+            let updates = Arc::clone(&updates);
+            let worker_pool = Arc::clone(&worker_pool);
+            move || {
+                updates.lock().unwrap().push(worker_pool.running());
+                current_thread.unpark();
+            }
+        });
+
+        on_update.set(on_update_callback);
+
+        // Start the `WorkerPool` and make sure the callback is being invoked!
+        let timeout = Duration::from_millis(100);
+        let mut start = IntervalInstant::now();
+
+        // Start the `WorkerPool`, add to it, then let it finish
+        let active_workers = worker_pool.spawn(5, || sleep_ms(5)).unwrap();
+
+        thread::park_timeout(timeout);
+        assert!(start.elapsed() < Duration::from_millis(1));
+        assert!(worker_pool.running());
+        assert_eq!(worker_pool.available_workers(), 1);
+        assert_eq!(active_workers, 5);
+
+        let active_workers = worker_pool.spawn(1, || sleep_ms(5)).unwrap();
+
+        assert!(worker_pool.running());
+        assert_eq!(worker_pool.available_workers(), 0);
+        assert_eq!(active_workers, 6);
+
+        thread::park_timeout(timeout);
+        assert!(start.elapsed() < Duration::from_millis(6));
+        assert!(!worker_pool.running());
+        assert_eq!(worker_pool.available_workers(), 6);
+
+        // Make sure the `WorkerPool` isn't started by `.spawn()`ing zero workers
+        let active_workers = worker_pool.spawn(0, || sleep_ms(5)).unwrap();
+
+        assert!(!worker_pool.running());
+        assert_eq!(worker_pool.available_workers(), 6);
+        assert_eq!(active_workers, 0);
+
+        // Start the `WorkerPool` again, but don't let it finish before checking `updates`
+        let active_workers = worker_pool.spawn(2, || sleep_ms(5)).unwrap();
+
+        thread::park_timeout(timeout);
+        assert!(start.elapsed() < Duration::from_millis(1));
+        assert!(worker_pool.running());
+        assert_eq!(worker_pool.available_workers(), 4);
+        assert_eq!(active_workers, 2);
+
+        assert_eq!(updates.lock().unwrap()[..], [true, false, true]);
+
+        // Let the `WorkerPool` finish and then check `updates` again
+        thread::park_timeout(timeout);
+        assert!(start.elapsed() < Duration::from_millis(6));
+
+        assert_eq!(updates.lock().unwrap()[..], [true, false, true, false]);
     }
 }
