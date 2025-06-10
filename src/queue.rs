@@ -314,10 +314,7 @@ impl Queue {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        sync::{Mutex, RwLock},
-        thread,
-    };
+    use std::{sync::Mutex, thread};
 
     use tempfile::tempdir;
 
@@ -974,9 +971,7 @@ mod tests {
         let temporary_directory = tempdir().unwrap();
 
         // First, set up a `Queue` with a debugging / logging callback
-        let queue = Arc::new(RwLock::new(
-            Queue::new(3, Duration::from_millis(10)).unwrap(),
-        ));
+        let queue = Arc::new(Queue::new(3, Duration::from_millis(10)).unwrap());
 
         let current_thread = thread::current();
         let updates = Arc::new(Mutex::new(Vec::new()));
@@ -984,18 +979,13 @@ mod tests {
             let updates = Arc::clone(&updates);
             let queue = Arc::clone(&queue);
             move || {
-                updates
-                    .lock()
-                    .unwrap()
-                    .push(job_statuses(&queue.read().unwrap()));
+                updates.lock().unwrap().push(job_statuses(&queue));
                 current_thread.unpark();
             }
         });
 
         // Start by queueing a couple of `Job`s before setting the `on_update`
         queue
-            .read()
-            .unwrap()
             .queue_jobs(
                 BASE_WORKFLOW,
                 SAMPLE_FILES,
@@ -1006,8 +996,7 @@ mod tests {
             .unwrap();
 
         // Then register the `on_update`
-        queue.write().unwrap().set_on_update(on_update);
-        let queue = queue.read().unwrap();
+        queue.set_on_update(on_update);
 
         let timeout = Duration::from_millis(300);
         let mut start = IntervalInstant::now();

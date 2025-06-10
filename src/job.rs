@@ -255,7 +255,7 @@ pub(crate) mod tests {
 
         // Construct a `Job` with a callback
         let on_update = Arc::new(RwLock::new(None));
-        let job = Arc::new(RwLock::new(Job::new(workflow, Arc::clone(&on_update))));
+        let job = Arc::new(Job::new(workflow, Arc::clone(&on_update)));
 
         let current_thread = thread::current();
         let updates = Arc::new(Mutex::new(Vec::new()));
@@ -263,7 +263,7 @@ pub(crate) mod tests {
             let updates = Arc::clone(&updates);
             let job = Arc::clone(&job);
             move || {
-                updates.lock().unwrap().push(job.read().unwrap().status());
+                updates.lock().unwrap().push(job.status());
                 current_thread.unpark();
             }
         });
@@ -274,7 +274,7 @@ pub(crate) mod tests {
         thread::spawn({
             let job = Arc::clone(&job);
             move || unsafe {
-                with_test_path(COMPLETES_PATH, || job.read().unwrap().run().unwrap());
+                with_test_path(COMPLETES_PATH, || job.run().unwrap());
             }
         });
 
@@ -287,7 +287,7 @@ pub(crate) mod tests {
         thread::park_timeout(timeout);
         assert!(start.elapsed() < Duration::from_millis(15));
 
-        job.read().unwrap().reset().unwrap();
+        job.reset().unwrap();
 
         thread::park_timeout(timeout);
         assert!(start.elapsed() < Duration::from_millis(5));
