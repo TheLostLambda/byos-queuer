@@ -9,11 +9,7 @@ use crate::STATE;
 
 #[component]
 pub fn RunButton(running: bool, ready: bool) -> Element {
-    let color_class = if running {
-        "btn-warning"
-    } else {
-        "btn-success"
-    };
+    let color_class = if running { "btn-error" } else { "btn-success" };
 
     rsx! {
         button {

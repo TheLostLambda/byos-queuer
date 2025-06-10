@@ -12,7 +12,7 @@ pub fn StatusBadge(status: StatusProp) -> Element {
     let (color_class, content, tooltip) = match status.0 {
         Status::Queued => ("badge-neutral", rsx! { "Queued" }, None),
         Status::Running(_, instant) => (
-            "badge-info",
+            "badge-primary",
             rsx! { "Running ", RunTime { time: instant } },
             None,
         ),
@@ -22,7 +22,7 @@ pub fn StatusBadge(status: StatusProp) -> Element {
             None,
         ),
         Status::Failed(report, duration) => (
-            "badge-warning",
+            "badge-error",
             rsx! { "Failed ", RunTime { time: duration } },
             Some(report.to_string()),
         ),
