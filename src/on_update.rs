@@ -1,5 +1,8 @@
 // Standard Library Imports
-use std::sync::{Arc, RwLock};
+use std::{
+    fmt::{self, Debug, Formatter},
+    sync::{Arc, RwLock},
+};
 
 // Public API ==========================================================================================================
 
@@ -28,6 +31,16 @@ impl OnUpdate {
 }
 
 pub type OnUpdateCallback = Arc<dyn Fn() + Send + Sync>;
+
+impl Debug for OnUpdate {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        #[derive(Debug)]
+        struct OnUpdateCallback;
+
+        let option = self.0.read().unwrap().as_ref().map(|_| OnUpdateCallback);
+        write!(f, "{:?}", Arc::new(RwLock::new(option)))
+    }
+}
 
 // Unit Tests ==========================================================================================================
 
