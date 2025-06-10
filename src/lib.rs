@@ -5,6 +5,7 @@
 pub mod cancellable_timer;
 pub mod job;
 pub mod modifications;
+pub mod on_update;
 pub mod proteins;
 pub mod queue;
 pub mod samples;
