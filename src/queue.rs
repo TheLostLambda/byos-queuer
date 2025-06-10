@@ -315,11 +315,8 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::{
-        job::{
-            StatusDiscriminant::{self, *},
-            tests::IntervalInstant,
-        },
-        worker_pool::tests::sleep_ms,
+        job::StatusDiscriminant::{self, *},
+        worker_pool::tests::{IntervalInstant, sleep_ms},
         workflow::tests::{
             BASE_WORKFLOW, MODIFICATIONS_FILE, PROTEIN_FASTA_FILE, SAMPLE_FILES, WORKFLOW_NAME,
             with_test_path,

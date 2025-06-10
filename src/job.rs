@@ -152,7 +152,7 @@ pub(crate) mod tests {
     use tempfile::tempdir;
 
     use crate::{
-        worker_pool::tests::sleep_ms,
+        worker_pool::tests::{IntervalInstant, sleep_ms},
         workflow::tests::{
             BASE_WORKFLOW, MODIFICATIONS_FILE, PROTEIN_FASTA_FILE, SAMPLE_FILES, result_file_in,
             wflw_file_in, with_test_path,
@@ -161,25 +161,6 @@ pub(crate) mod tests {
 
     use super::*;
     use StatusDiscriminant::*;
-
-    pub struct IntervalInstant(Instant);
-
-    impl IntervalInstant {
-        pub fn now() -> Self {
-            Self(Instant::now())
-        }
-
-        // NOTE: The "resetting" of the `Instant` to `Instant::now()` means that `IntervalInstant.elapsed()` gives the
-        // elapsed `Duration` since the `IntervalInstant`'s creation *or* the last call to `IntervalInstant.elapsed()`.
-        // This means tests can make assertions about interval `Duration`s without repeatedly calling `Instant::now()`
-        // or relying on brittle running totals of the elapsed time (which make it difficult to insert new steps into
-        // the middle of an existing test)
-        pub fn elapsed(&mut self) -> Duration {
-            let result = self.0.elapsed();
-            *self = Self::now();
-            result
-        }
-    }
 
     // TODO: On Windows, use `formatc!()` here to change the prefix between `tests/scripts/windows` and
     // `tests/scripts/unix` at compile time

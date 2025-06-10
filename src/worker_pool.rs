@@ -92,14 +92,34 @@ impl WorkerPool {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use std::{sync::Mutex, time::Duration};
-
-    use crate::job::tests::IntervalInstant;
+    use std::{
+        sync::Mutex,
+        time::{Duration, Instant},
+    };
 
     use super::*;
 
     pub fn sleep_ms(millis: u64) {
         thread::sleep(Duration::from_millis(millis));
+    }
+
+    pub struct IntervalInstant(Instant);
+
+    impl IntervalInstant {
+        pub fn now() -> Self {
+            Self(Instant::now())
+        }
+
+        // NOTE: The "resetting" of the `Instant` to `Instant::now()` means that `IntervalInstant.elapsed()` gives the
+        // elapsed `Duration` since the `IntervalInstant`'s creation *or* the last call to `IntervalInstant.elapsed()`.
+        // This means tests can make assertions about interval `Duration`s without repeatedly calling `Instant::now()`
+        // or relying on brittle running totals of the elapsed time (which make it difficult to insert new steps into
+        // the middle of an existing test)
+        pub fn elapsed(&mut self) -> Duration {
+            let result = self.0.elapsed();
+            *self = Self::now();
+            result
+        }
     }
 
     #[test]
