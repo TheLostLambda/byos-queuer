@@ -1,6 +1,6 @@
 // Standard Library Imports
 use std::{
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -12,7 +12,7 @@ use color_eyre::{
 use duct::Handle;
 
 // Local Crate Imports
-use crate::workflow::Workflow;
+use crate::{on_update::OnUpdate, workflow::Workflow};
 
 // Public API ==========================================================================================================
 
@@ -61,7 +61,7 @@ impl Job {
 
         // NOTE: If we've made it here, we can be certain that `status` has changed and that we need to signal an
         // update — if the `Job` was already `Queued`, then we would have returned early!
-        self.on_update();
+        self.on_update.call();
 
         Ok(())
     }
@@ -79,7 +79,7 @@ impl Job {
                 let instant = Instant::now();
                 let handle = Arc::new(self.workflow.start()?);
                 *self.status.lock().unwrap() = Status::Running(Arc::clone(&handle), instant);
-                self.on_update();
+                self.on_update.call();
 
                 Ok(())
             }
@@ -101,16 +101,13 @@ impl Job {
             // waiting — if it has, we should leave the status as is!
             if let Status::Running(..) = self.status() {
                 *self.status.lock().unwrap() = exit_status;
-                self.on_update();
+                self.on_update.call();
             }
         }
     }
 }
 
 // Private Helper Code =================================================================================================
-
-pub(crate) type OnUpdate = Arc<RwLock<Option<OnUpdateCallback>>>;
-pub(crate) type OnUpdateCallback = Arc<dyn Fn() + Send + Sync>;
 
 impl Job {
     pub(crate) fn quiet_reset(&self) -> Result<()> {
@@ -123,19 +120,13 @@ impl Job {
 
         Ok(())
     }
-
-    fn on_update(&self) {
-        if let Some(ref on_update) = *self.on_update.read().unwrap() {
-            on_update();
-        }
-    }
 }
 
 // Unit Tests ==========================================================================================================
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use std::{sync::RwLock, thread};
+    use std::thread;
 
     use tempfile::tempdir;
 
@@ -190,7 +181,7 @@ pub(crate) mod tests {
         .unwrap();
 
         // Run a job that should complete sucessfully
-        let job = Arc::new(Job::new(workflow, Arc::new(RwLock::new(None))));
+        let job = Arc::new(Job::new(workflow, OnUpdate::new()));
 
         thread::spawn({
             let job = Arc::clone(&job);
@@ -254,8 +245,8 @@ pub(crate) mod tests {
         .unwrap();
 
         // Construct a `Job` with a callback
-        let on_update = Arc::new(RwLock::new(None));
-        let job = Arc::new(Job::new(workflow, Arc::clone(&on_update)));
+        let on_update = OnUpdate::new();
+        let job = Arc::new(Job::new(workflow, on_update.clone()));
 
         let current_thread = thread::current();
         let updates = Arc::new(Mutex::new(Vec::new()));
@@ -268,7 +259,7 @@ pub(crate) mod tests {
             }
         });
 
-        *on_update.write().unwrap() = Some(on_update_callback);
+        on_update.set(on_update_callback);
 
         // Start the `Job` and make sure the callback is being invoked!
         thread::spawn({

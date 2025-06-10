@@ -12,7 +12,8 @@ use color_eyre::eyre::{OptionExt, Result, eyre};
 // Local Crate Imports
 use crate::{
     cancellable_timer::CancellableTimer,
-    job::{Job, OnUpdate, OnUpdateCallback, Status},
+    job::{Job, Status},
+    on_update::{OnUpdate, OnUpdateCallback},
     worker_pool::WorkerPool,
     workflow::Workflow,
 };
@@ -31,7 +32,7 @@ impl Queue {
         let jobs = Arc::new(RwLock::new(Vec::new()));
         let worker_pool = WorkerPool::new(workers)?;
         let stagger_timer = Self::stagger_timer(stagger_duration)?;
-        let on_update = Arc::new(RwLock::new(None));
+        let on_update = OnUpdate::new();
 
         Ok(Self {
             jobs,
@@ -60,11 +61,11 @@ impl Queue {
     }
 
     pub fn set_on_update(&self, on_update: OnUpdateCallback) {
-        *self.on_update.write().unwrap() = Some(on_update);
+        self.on_update.set(on_update);
     }
 
     pub fn clear_on_update(&self) {
-        *self.on_update.write().unwrap() = None;
+        self.on_update.clear();
     }
 
     // Getters ---------------------------------------------------------------------------------------------------------
@@ -127,7 +128,7 @@ impl Queue {
             .write()
             .unwrap()
             .push(Arc::new(Job::new(workflow, self.on_update.clone())));
-        self.on_update();
+        self.on_update.call();
 
         // NOTE: If the `Queue` is already running, but isn't at its maximum worker capacity yet, then a new worker may
         // need spawning — this method does nothing if the `Queue` is stopped or already at its maximum worker capacity.
@@ -154,7 +155,7 @@ impl Queue {
         // NOTE: This kills any `removed_job`s that were still running
         removed_job.quiet_reset()?;
 
-        self.on_update();
+        self.on_update.call();
 
         Ok(())
     }
@@ -188,7 +189,7 @@ impl Queue {
             }
         }
 
-        self.on_update();
+        self.on_update.call();
 
         Ok(())
     }
@@ -201,7 +202,7 @@ impl Queue {
             job.quiet_reset()?;
         }
 
-        self.on_update();
+        self.on_update.call();
 
         Ok(())
     }
@@ -214,7 +215,7 @@ impl Queue {
             self.spawn_worker_if_running();
         }
 
-        self.on_update();
+        self.on_update.call();
 
         Ok(())
     }
@@ -243,12 +244,6 @@ impl Queue {
         }
 
         Ok(())
-    }
-
-    fn on_update(&self) {
-        if let Some(ref on_update) = *self.on_update.read().unwrap() {
-            on_update();
-        }
     }
 
     fn cancelled(&self) -> bool {
