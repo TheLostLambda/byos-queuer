@@ -97,7 +97,7 @@ impl Queue {
         output_directory: impl AsRef<Path> + Copy,
     ) -> Result<()> {
         for sample_file in sample_files {
-            self.queue_grouped_job(
+            self.queue_job(
                 base_workflow,
                 &[sample_file],
                 protein_file,
@@ -105,6 +105,8 @@ impl Queue {
                 output_directory,
             )?;
         }
+
+        self.on_update.call();
 
         Ok(())
     }
@@ -117,7 +119,7 @@ impl Queue {
         modifications_file: Option<impl AsRef<Path> + Copy>,
         output_directory: impl AsRef<Path> + Copy,
     ) -> Result<()> {
-        let workflow = Workflow::new(
+        self.queue_job(
             base_workflow,
             sample_files,
             protein_file,
@@ -125,15 +127,7 @@ impl Queue {
             output_directory,
         )?;
 
-        self.jobs
-            .write()
-            .unwrap()
-            .push(Arc::new(Job::new(workflow, self.on_update.clone())));
         self.on_update.call();
-
-        // NOTE: If the `Queue` is already running, but isn't at its maximum worker capacity yet, then a new worker may
-        // need spawning — this method does nothing if the `Queue` is stopped or already at its maximum worker capacity.
-        self.spawn_worker_if_running();
 
         Ok(())
     }
@@ -243,6 +237,34 @@ impl Queue {
         if self.running() {
             return Err(eyre!("the `Queue` must be stopped to `{method_name}()`"));
         }
+
+        Ok(())
+    }
+
+    pub fn queue_job(
+        &self,
+        base_workflow: impl AsRef<Path> + Copy,
+        sample_files: impl IntoIterator<Item = impl AsRef<Path>> + Copy,
+        protein_file: impl AsRef<Path> + Copy,
+        modifications_file: Option<impl AsRef<Path> + Copy>,
+        output_directory: impl AsRef<Path> + Copy,
+    ) -> Result<()> {
+        let workflow = Workflow::new(
+            base_workflow,
+            sample_files,
+            protein_file,
+            modifications_file,
+            output_directory,
+        )?;
+
+        self.jobs
+            .write()
+            .unwrap()
+            .push(Arc::new(Job::new(workflow, self.on_update.clone())));
+
+        // NOTE: If the `Queue` is already running, but isn't at its maximum worker capacity yet, then a new worker may
+        // need spawning — this method does nothing if the `Queue` is stopped or already at its maximum worker capacity.
+        self.spawn_worker_if_running();
 
         Ok(())
     }
@@ -935,9 +957,6 @@ mod tests {
                 )
                 .unwrap();
 
-            // FIXME: We're missing an unpark here — I assume because the two unparks at too quick and one is lost. The
-            // solution is changing the `queue_*` methods to just call `on_update()` once, no matter the number of added
-            // `Job`s!
             assert_unpark_within_ms!(75);
 
             // `queue.run()` -------------------------------------------------------------------------------------------
@@ -988,7 +1007,6 @@ mod tests {
             // `queue.clear()`
             (&[], false),
             // `queue.queue_jobs()`
-            (&[Queued], false),
             (&[Queued, Queued], false),
             // `queue.run()`
             (&[Queued, Queued], true),
