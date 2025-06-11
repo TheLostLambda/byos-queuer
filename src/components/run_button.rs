@@ -8,13 +8,13 @@ use dioxus::prelude::*;
 use crate::STATE;
 
 #[component]
-pub fn RunButton(running: bool, ready: bool) -> Element {
+pub fn RunButton(running: bool, finished: bool) -> Element {
     let color_class = if running { "btn-error" } else { "btn-success" };
 
     rsx! {
         button {
             class: "btn btn-block {color_class}",
-            disabled: !running && !ready,
+            disabled: finished,
             onclick: move |_| {
                 let queue = STATE.read().unwrap();
                 if running {

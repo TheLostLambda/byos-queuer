@@ -14,7 +14,7 @@ pub fn Jobs() -> Element {
     let queue = STATE.read().unwrap();
     let jobs = queue.jobs();
     let running = queue.running();
-    let ready = queue.ready();
+    let finished = queue.finished();
     drop(queue);
 
     rsx! {
@@ -26,7 +26,7 @@ pub fn Jobs() -> Element {
                     Job { index, name, status }
                 }
             }
-            RunBar { running, ready }
+            RunBar { running, finished }
         }
     }
 }

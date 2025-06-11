@@ -8,11 +8,11 @@ use dioxus::prelude::*;
 use crate::components::run_button::RunButton;
 
 #[component]
-pub fn RunBar(running: bool, ready: bool) -> Element {
+pub fn RunBar(running: bool, finished: bool) -> Element {
     rsx! {
         div { class: "flex items-center justify-between",
 
-            RunButton { running, ready }
+            RunButton { running, finished }
         }
     }
 }
