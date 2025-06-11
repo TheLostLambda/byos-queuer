@@ -10,15 +10,15 @@ use crate::STATE;
 
 #[component]
 pub fn RunButton(status: QueueStatus) -> Element {
-    let color_class = if status == QueueStatus::Running {
-        "btn-error"
-    } else {
-        "btn-success"
+    let (color_class, content) = match status {
+        QueueStatus::Running => ("btn-error", rsx! { "Cancel" }),
+        QueueStatus::Stopping => ("btn-warning", rsx! { "Stopping..." }),
+        QueueStatus::Ready | QueueStatus::Finished => ("btn-success", rsx! { "Run" }),
     };
 
     rsx! {
         button {
-            class: "btn btn-block {color_class}",
+            class: "btn btn-block {color_class} text-lg",
             disabled: status == QueueStatus::Finished,
             onclick: move |_| {
                 let queue = STATE.read().unwrap();
@@ -29,11 +29,7 @@ pub fn RunButton(status: QueueStatus) -> Element {
                 }
             },
 
-            if status == QueueStatus::Running {
-                "Cancel"
-            } else {
-                "Run"
-            }
+            {content}
         }
     }
 }
