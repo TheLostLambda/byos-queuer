@@ -93,8 +93,8 @@ impl WorkerPool {
 #[cfg(test)]
 pub(crate) mod tests {
     use std::{
-        sync::Mutex,
-        time::{Duration, Instant},
+        sync::{Condvar, Mutex, WaitTimeoutResult},
+        time::Duration,
     };
 
     use super::*;
@@ -103,14 +103,61 @@ pub(crate) mod tests {
         thread::sleep(Duration::from_millis(millis));
     }
 
+    #[derive(Debug, Default)]
+    pub struct ThreadParker {
+        unpark_count: Mutex<usize>,
+        condvar: Condvar,
+    }
+
+    impl ThreadParker {
+        pub fn new() -> Self {
+            let unpark_count = Mutex::new(0);
+            let condvar = Condvar::new();
+
+            Self {
+                unpark_count,
+                condvar,
+            }
+        }
+
+        pub fn unpark(&self) {
+            *self.unpark_count.lock().unwrap() += 1;
+            self.condvar.notify_all();
+        }
+
+        pub fn park_timeout(&self, timeout: Duration) -> WaitTimeoutResult {
+            let (mut unpark_count, result) = self
+                .condvar
+                .wait_timeout_while(
+                    self.unpark_count.lock().unwrap(),
+                    timeout,
+                    |&mut unpark_count| unpark_count == 0,
+                )
+                .unwrap();
+
+            if !result.timed_out() {
+                // SAFETY: This should never underflow since the `.wait_timeout_while()` returning *without* timing out
+                // means that `unpark_count == 0` became false (meaning that `unpark_count > 0` since it's a `usize`).
+                // Because `.wait_timeout_while()` returns an already-locked `unpark_count`, we can also be certain that
+                // no thread will have changed that value in the meantime
+                *unpark_count -= 1;
+            }
+            drop(unpark_count);
+
+            result
+        }
+
+        pub fn no_missed_parks(&self) -> bool {
+            *self.unpark_count.lock().unwrap() == 0
+        }
+    }
+
     #[macro_export]
     macro_rules! assert_unpark_within_ms {
-        ($timeout:expr $(,)?) => {
+        ($thread_parker:expr, $timeout:expr $(,)?) => {
             let timeout = Duration::from_millis($timeout);
-            let park_start = Instant::now();
-            thread::park_timeout(timeout);
             assert!(
-                park_start.elapsed() < timeout,
+                !$thread_parker.park_timeout(timeout).timed_out(),
                 "the thread did not unpark within {timeout:?}"
             );
         };
@@ -176,14 +223,15 @@ pub(crate) mod tests {
         let on_update = OnUpdate::new();
         let worker_pool = Arc::new(WorkerPool::new(6, on_update.clone()).unwrap());
 
-        let current_thread = thread::current();
+        let thread_parker = Arc::new(ThreadParker::new());
         let updates = Arc::new(Mutex::new(Vec::new()));
         let on_update_callback = Arc::new({
             let updates = Arc::clone(&updates);
             let worker_pool = Arc::clone(&worker_pool);
+            let thread_parker = Arc::clone(&thread_parker);
             move || {
                 updates.lock().unwrap().push(worker_pool.running());
-                current_thread.unpark();
+                thread_parker.unpark();
             }
         });
 
@@ -192,7 +240,7 @@ pub(crate) mod tests {
         // Start the `WorkerPool` and make sure the callback is being invoked!
         let active_workers = worker_pool.spawn(5, || sleep_ms(5)).unwrap();
 
-        assert_unpark_within_ms!(1);
+        assert_unpark_within_ms!(thread_parker, 1);
         assert!(worker_pool.running());
         assert_eq!(worker_pool.available_workers(), 1);
         assert_eq!(active_workers, 5);
@@ -203,7 +251,7 @@ pub(crate) mod tests {
         assert_eq!(worker_pool.available_workers(), 0);
         assert_eq!(active_workers, 6);
 
-        assert_unpark_within_ms!(6);
+        assert_unpark_within_ms!(thread_parker, 6);
         assert!(!worker_pool.running());
         assert_eq!(worker_pool.available_workers(), 6);
 
@@ -217,7 +265,7 @@ pub(crate) mod tests {
         // Start the `WorkerPool` again, but don't let it finish before checking `updates`
         let active_workers = worker_pool.spawn(2, || sleep_ms(5)).unwrap();
 
-        assert_unpark_within_ms!(1);
+        assert_unpark_within_ms!(thread_parker, 1);
         assert!(worker_pool.running());
         assert_eq!(worker_pool.available_workers(), 4);
         assert_eq!(active_workers, 2);
@@ -225,8 +273,10 @@ pub(crate) mod tests {
         assert_eq!(updates.lock().unwrap()[..], [true, false, true]);
 
         // Let the `WorkerPool` finish and then check `updates` again
-        assert_unpark_within_ms!(6);
+        assert_unpark_within_ms!(thread_parker, 6);
 
         assert_eq!(updates.lock().unwrap()[..], [true, false, true, false]);
+
+        assert!(thread_parker.no_missed_parks());
     }
 }

@@ -153,7 +153,7 @@ pub(crate) mod tests {
 
     use crate::{
         assert_unpark_within_ms,
-        worker_pool::tests::sleep_ms,
+        worker_pool::tests::{ThreadParker, sleep_ms},
         workflow::tests::{
             BASE_WORKFLOW, MODIFICATIONS_FILE, PROTEIN_FASTA_FILE, SAMPLE_FILES, result_file_in,
             wflw_file_in, with_test_path,
@@ -256,14 +256,15 @@ pub(crate) mod tests {
         let on_update = OnUpdate::new();
         let job = Arc::new(Job::new(workflow, on_update.clone()));
 
-        let current_thread = thread::current();
+        let thread_parker = Arc::new(ThreadParker::new());
         let updates = Arc::new(Mutex::new(Vec::new()));
         let on_update_callback = Arc::new({
             let updates = Arc::clone(&updates);
             let job = Arc::clone(&job);
+            let thread_parker = Arc::clone(&thread_parker);
             move || {
                 updates.lock().unwrap().push(status(&job));
-                current_thread.unpark();
+                thread_parker.unpark();
             }
         });
 
@@ -277,13 +278,15 @@ pub(crate) mod tests {
             }
         });
 
-        assert_unpark_within_ms!(5);
-        assert_unpark_within_ms!(15);
+        assert_unpark_within_ms!(thread_parker, 5);
+        assert_unpark_within_ms!(thread_parker, 15);
 
         job.reset().unwrap();
 
-        assert_unpark_within_ms!(1);
+        assert_unpark_within_ms!(thread_parker, 1);
 
         assert_eq!(updates.lock().unwrap()[..], [Running, Completed, Queued]);
+
+        assert!(thread_parker.no_missed_parks());
     }
 }

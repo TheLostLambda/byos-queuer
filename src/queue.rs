@@ -375,7 +375,7 @@ mod tests {
     use crate::{
         assert_unpark_within_ms,
         job::StatusDiscriminant::{self, *},
-        worker_pool::tests::sleep_ms,
+        worker_pool::tests::{ThreadParker, sleep_ms},
         workflow::tests::{
             BASE_WORKFLOW, MODIFICATIONS_FILE, PROTEIN_FASTA_FILE, SAMPLE_FILES, WORKFLOW_NAME,
             with_test_path,
@@ -998,6 +998,7 @@ mod tests {
     #[test]
     // NOTE: It's a test, so I think this is alright for now
     #[expect(clippy::too_many_lines)]
+    #[expect(clippy::cognitive_complexity)]
     // NOTE: Implementing the suggestions here lead to the test not compiling
     #[expect(clippy::significant_drop_tightening)]
     fn on_update_callback() {
@@ -1006,17 +1007,18 @@ mod tests {
         // First, set up a `Queue` with a debugging / logging callback
         let queue = Arc::new(Queue::new(3, Duration::from_millis(10)).unwrap());
 
-        let current_thread = thread::current();
+        let thread_parker = Arc::new(ThreadParker::new());
         let updates = Arc::new(Mutex::new(Vec::new()));
         let on_update = Arc::new({
             let updates = Arc::clone(&updates);
             let queue = Arc::clone(&queue);
+            let thread_parker = Arc::clone(&thread_parker);
             move || {
                 updates
                     .lock()
                     .unwrap()
                     .push((job_statuses(&queue), queue.running()));
-                current_thread.unpark();
+                thread_parker.unpark();
             }
         });
 
@@ -1048,54 +1050,54 @@ mod tests {
                 )
                 .unwrap();
 
-            assert_unpark_within_ms!(75);
+            assert_unpark_within_ms!(thread_parker, 75);
 
             // `queue.run()` -------------------------------------------------------------------------------------------
 
             queue.run().unwrap();
 
-            assert_unpark_within_ms!(1);
-            assert_unpark_within_ms!(5);
-            assert_unpark_within_ms!(15);
-            assert_unpark_within_ms!(15);
-            assert_unpark_within_ms!(25);
+            assert_unpark_within_ms!(thread_parker, 1);
+            assert_unpark_within_ms!(thread_parker, 5);
+            assert_unpark_within_ms!(thread_parker, 15);
+            assert_unpark_within_ms!(thread_parker, 15);
+            assert_unpark_within_ms!(thread_parker, 25);
 
             // `queue.reset()` -----------------------------------------------------------------------------------------
 
             queue.reset().unwrap();
 
-            assert_unpark_within_ms!(1);
-            assert_unpark_within_ms!(5);
-            assert_unpark_within_ms!(15);
+            assert_unpark_within_ms!(thread_parker, 1);
+            assert_unpark_within_ms!(thread_parker, 5);
+            assert_unpark_within_ms!(thread_parker, 15);
 
             // `queue.reset_job(0)` ------------------------------------------------------------------------------------
 
             queue.reset_job(0).unwrap();
 
-            assert_unpark_within_ms!(1);
-            assert_unpark_within_ms!(15);
-            assert_unpark_within_ms!(15);
-            assert_unpark_within_ms!(35);
-            assert_unpark_within_ms!(15);
+            assert_unpark_within_ms!(thread_parker, 1);
+            assert_unpark_within_ms!(thread_parker, 15);
+            assert_unpark_within_ms!(thread_parker, 15);
+            assert_unpark_within_ms!(thread_parker, 35);
+            assert_unpark_within_ms!(thread_parker, 15);
 
             // `queue.cancel()` ----------------------------------------------------------------------------------------
 
             queue.cancel().unwrap();
 
-            assert_unpark_within_ms!(1);
-            assert_unpark_within_ms!(1);
+            assert_unpark_within_ms!(thread_parker, 1);
+            assert_unpark_within_ms!(thread_parker, 1);
 
             // `queue.reset()` -----------------------------------------------------------------------------------------
 
             queue.reset().unwrap();
 
-            assert_unpark_within_ms!(1);
+            assert_unpark_within_ms!(thread_parker, 1);
 
             // `queue.clear()` -----------------------------------------------------------------------------------------
 
             queue.clear().unwrap();
 
-            assert_unpark_within_ms!(1);
+            assert_unpark_within_ms!(thread_parker, 1);
 
             // `queue.queue_jobs()` ------------------------------------------------------------------------------------
 
@@ -1109,27 +1111,29 @@ mod tests {
                 )
                 .unwrap();
 
-            assert_unpark_within_ms!(75);
+            assert_unpark_within_ms!(thread_parker, 75);
 
             // `queue.run()` -------------------------------------------------------------------------------------------
 
             queue.run().unwrap();
 
-            assert_unpark_within_ms!(1);
-            assert_unpark_within_ms!(5);
+            assert_unpark_within_ms!(thread_parker, 1);
+            assert_unpark_within_ms!(thread_parker, 5);
 
             // `queue.remove_job(0)` -----------------------------------------------------------------------------------
 
             queue.remove_job(0).unwrap();
 
-            assert_unpark_within_ms!(1);
+            assert_unpark_within_ms!(thread_parker, 1);
 
             // `queue.clear()` -----------------------------------------------------------------------------------------
 
             queue.clear().unwrap();
 
-            assert_unpark_within_ms!(1);
-            assert_unpark_within_ms!(5);
+            assert_unpark_within_ms!(thread_parker, 1);
+            assert_unpark_within_ms!(thread_parker, 5);
+
+            assert!(thread_parker.no_missed_parks());
         };
 
         unsafe { with_test_path(FAST_PATH, test_code) }
