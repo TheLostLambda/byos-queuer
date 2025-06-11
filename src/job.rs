@@ -21,8 +21,10 @@ pub enum Status {
     #[default]
     Queued,
     Running(Arc<Handle>, Instant),
+    Resetting,
     Completed(Duration),
     Failed(Arc<Report>, Duration),
+    Abandoned,
 }
 
 pub struct Job {
@@ -84,9 +86,13 @@ impl Job {
                 Ok(())
             }
             Status::Running(..) => Err(eyre!("this `Job` is already running")),
+            Status::Resetting => Err(eyre!(
+                "this `Job` is resetting; please wait for it to fully stop before re-running"
+            )),
             Status::Completed(..) | Status::Failed(..) => Err(eyre!(
                 "the `Job` has already been run — if you'd like to re-run it, first reset its status with `Job.reset()`"
             )),
+            Status::Abandoned => Err(eyre!("this `Job` has been abandoned")),
         }
     }
 
@@ -97,12 +103,19 @@ impl Job {
                 Err(error) => Status::Failed(Arc::new(error.into()), instant.elapsed()),
             };
 
-            // NOTE: We're rechecking the status to make sure it hasn't been reset by another thread since we started
-            // waiting — if it has, we should leave the status as is!
-            if let Status::Running(..) = self.status() {
-                *self.status.lock().unwrap() = exit_status;
-                self.on_update.call();
-            }
+            // NOTE: We're rechecking the status in case another thread has changed it whilst we've been `.wait()`ing
+            *self.status.lock().unwrap() = match self.status() {
+                Status::Running(..) => exit_status,
+                // NOTE: It takes some time to kill a `Running` `Job` after calling `Job.reset()` — with the child
+                // process now fully dead, we can re-queue the `Job`
+                Status::Resetting => Status::Queued,
+                // NOTE: `Abandoned` `Job`s should not have their statuses updated and should not call `on_update` —
+                // return early to avoid the `self.on_update.call()`
+                Status::Abandoned => return,
+                _ => unreachable!(),
+            };
+
+            self.on_update.call();
         }
     }
 }
@@ -115,8 +128,10 @@ impl Job {
 pub(crate) enum StatusDiscriminant {
     Queued,
     Running,
+    Stopping,
     Completed,
     Failed,
+    Abandoned,
 }
 
 impl From<Status> for StatusDiscriminant {
@@ -124,16 +139,29 @@ impl From<Status> for StatusDiscriminant {
         match value {
             Status::Queued => Self::Queued,
             Status::Running(..) => Self::Running,
+            Status::Resetting => Self::Stopping,
             Status::Completed(..) => Self::Completed,
             Status::Failed(..) => Self::Failed,
+            Status::Abandoned => Self::Abandoned,
         }
     }
 }
 
 impl Job {
     pub(crate) fn quiet_reset(&self) -> Result<()> {
+        if let Status::Running(handle, _) = self.status() {
+            *self.status.lock().unwrap() = Status::Resetting;
+            handle.kill()?;
+        } else {
+            *self.status.lock().unwrap() = Status::default();
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn abandon(&self) -> Result<()> {
         let prereset_status = self.status();
-        *self.status.lock().unwrap() = Status::default();
+        *self.status.lock().unwrap() = Status::Abandoned;
 
         if let Status::Running(handle, _) = prereset_status {
             handle.kill()?;

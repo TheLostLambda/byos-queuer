@@ -160,7 +160,7 @@ impl Queue {
         drop(jobs_guard);
 
         // NOTE: This kills any `removed_job`s that were still running
-        removed_job.quiet_reset()?;
+        removed_job.abandon()?;
 
         self.on_update.call();
 
@@ -226,7 +226,7 @@ impl Queue {
 
         for job in self.jobs.write().unwrap().drain(..) {
             // NOTE: This will ensure that any still-running, `.drain()`ed `Job`s are quietly killed
-            job.quiet_reset()?;
+            job.abandon()?;
         }
 
         self.on_update.call();
@@ -943,9 +943,14 @@ mod tests {
             queue.reset_job(0).unwrap();
 
             assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert_eq!(job_statuses(&queue), [Stopping, Running, Queued]);
+
+            sleep_ms(5);
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Queued, Running, Queued]);
 
-            sleep_ms(20);
+            sleep_ms(15);
 
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Running, Running, Queued]);
@@ -1051,6 +1056,7 @@ mod tests {
                 .unwrap();
 
             assert_unpark_within_ms!(thread_parker, 75);
+            assert!(thread_parker.no_missed_parks());
 
             // `queue.run()` -------------------------------------------------------------------------------------------
 
@@ -1061,6 +1067,7 @@ mod tests {
             assert_unpark_within_ms!(thread_parker, 15);
             assert_unpark_within_ms!(thread_parker, 15);
             assert_unpark_within_ms!(thread_parker, 25);
+            assert!(thread_parker.no_missed_parks());
 
             // `queue.reset()` -----------------------------------------------------------------------------------------
 
@@ -1068,36 +1075,45 @@ mod tests {
 
             assert_unpark_within_ms!(thread_parker, 1);
             assert_unpark_within_ms!(thread_parker, 5);
+            assert_unpark_within_ms!(thread_parker, 5);
+            assert_unpark_within_ms!(thread_parker, 5);
             assert_unpark_within_ms!(thread_parker, 15);
+            assert!(thread_parker.no_missed_parks());
 
             // `queue.reset_job(0)` ------------------------------------------------------------------------------------
 
             queue.reset_job(0).unwrap();
 
             assert_unpark_within_ms!(thread_parker, 1);
+            assert_unpark_within_ms!(thread_parker, 5);
             assert_unpark_within_ms!(thread_parker, 15);
             assert_unpark_within_ms!(thread_parker, 15);
             assert_unpark_within_ms!(thread_parker, 35);
             assert_unpark_within_ms!(thread_parker, 15);
+            assert!(thread_parker.no_missed_parks());
 
             // `queue.cancel()` ----------------------------------------------------------------------------------------
 
             queue.cancel().unwrap();
 
             assert_unpark_within_ms!(thread_parker, 1);
+            assert_unpark_within_ms!(thread_parker, 5);
             assert_unpark_within_ms!(thread_parker, 1);
+            assert!(thread_parker.no_missed_parks());
 
             // `queue.reset()` -----------------------------------------------------------------------------------------
 
             queue.reset().unwrap();
 
             assert_unpark_within_ms!(thread_parker, 1);
+            assert!(thread_parker.no_missed_parks());
 
             // `queue.clear()` -----------------------------------------------------------------------------------------
 
             queue.clear().unwrap();
 
             assert_unpark_within_ms!(thread_parker, 1);
+            assert!(thread_parker.no_missed_parks());
 
             // `queue.queue_jobs()` ------------------------------------------------------------------------------------
 
@@ -1112,6 +1128,7 @@ mod tests {
                 .unwrap();
 
             assert_unpark_within_ms!(thread_parker, 75);
+            assert!(thread_parker.no_missed_parks());
 
             // `queue.run()` -------------------------------------------------------------------------------------------
 
@@ -1119,12 +1136,14 @@ mod tests {
 
             assert_unpark_within_ms!(thread_parker, 1);
             assert_unpark_within_ms!(thread_parker, 5);
+            assert!(thread_parker.no_missed_parks());
 
             // `queue.remove_job(0)` -----------------------------------------------------------------------------------
 
             queue.remove_job(0).unwrap();
 
             assert_unpark_within_ms!(thread_parker, 1);
+            assert!(thread_parker.no_missed_parks());
 
             // `queue.clear()` -----------------------------------------------------------------------------------------
 
@@ -1133,48 +1152,59 @@ mod tests {
             assert_unpark_within_ms!(thread_parker, 1);
             assert_unpark_within_ms!(thread_parker, 5);
 
+            sleep_ms(5);
             assert!(thread_parker.no_missed_parks());
         };
 
         unsafe { with_test_path(FAST_PATH, test_code) }
 
         let updates = updates.lock().unwrap();
-        let expected: &[(&[StatusDiscriminant], bool)] = &[
+        let expected: &[&[(&[StatusDiscriminant], bool)]] = &[
             // `queue.queue_grouped_job()`
-            (&[Queued, Queued, Queued], false),
+            &[(&[Queued, Queued, Queued], false)],
             // `queue.run()`
-            (&[Queued, Queued, Queued], true),
-            (&[Running, Queued, Queued], true),
-            (&[Running, Running, Queued], true),
-            (&[Running, Running, Running], true),
-            (&[Failed, Running, Running], true),
+            &[(&[Queued, Queued, Queued], true)],
+            &[(&[Running, Queued, Queued], true)],
+            &[(&[Running, Running, Queued], true)],
+            &[(&[Running, Running, Running], true)],
+            &[(&[Failed, Running, Running], true)],
             // `queue.reset()`
-            (&[Queued, Queued, Queued], true),
-            (&[Running, Queued, Queued], true),
-            (&[Running, Running, Queued], true),
+            &[(&[Queued, Stopping, Stopping], true)],
+            &[
+                (&[Queued, Queued, Stopping], true),
+                (&[Queued, Stopping, Queued], true),
+                // NOTE: It's possible that both `Stopping` `Job`s finish at around the same time and, even if there
+                // will still be two calls to `on_update`, the first of those calls could observe this state
+                (&[Queued, Queued, Queued], true),
+            ],
+            &[(&[Queued, Queued, Queued], true)],
+            &[(&[Running, Queued, Queued], true)],
+            &[(&[Running, Running, Queued], true)],
             // `queue.reset_job(0)`
-            (&[Queued, Running, Queued], true),
-            (&[Running, Running, Queued], true),
-            (&[Running, Running, Running], true),
-            (&[Failed, Running, Running], true),
-            (&[Failed, Running, Completed], true),
+            &[(&[Stopping, Running, Queued], true)],
+            &[(&[Queued, Running, Queued], true)],
+            &[(&[Running, Running, Queued], true)],
+            &[(&[Running, Running, Running], true)],
+            &[(&[Failed, Running, Running], true)],
+            &[(&[Failed, Running, Completed], true)],
             // `queue.cancel()`
-            (&[Failed, Queued, Completed], true),
-            (&[Failed, Queued, Completed], false),
+            &[(&[Failed, Stopping, Completed], true)],
+            &[(&[Failed, Queued, Completed], true)],
+            &[(&[Failed, Queued, Completed], false)],
             // `queue.reset()`
-            (&[Queued, Queued, Queued], false),
+            &[(&[Queued, Queued, Queued], false)],
             // `queue.clear()`
-            (&[], false),
+            &[(&[], false)],
             // `queue.queue_jobs()`
-            (&[Queued, Queued], false),
+            &[(&[Queued, Queued], false)],
             // `queue.run()`
-            (&[Queued, Queued], true),
-            (&[Running, Queued], true),
+            &[(&[Queued, Queued], true)],
+            &[(&[Running, Queued], true)],
             // `queue.remove_job(0)`
-            (&[Queued], true),
+            &[(&[Queued], true)],
             // `queue.clear()`
-            (&[], true),
-            (&[], false),
+            &[(&[], true)],
+            &[(&[], false)],
         ];
 
         for (index, (update, &expected)) in updates
@@ -1183,7 +1213,11 @@ mod tests {
             .zip(expected)
             .enumerate()
         {
-            assert_eq!(update, expected, "comparison failed at index {index}");
+            assert!(
+                expected.contains(&update),
+                "comparison failed at index {index}\n\
+                expected {update:?} to be one of {expected:?}"
+            );
         }
         assert_eq!(updates.len(), expected.len());
     }

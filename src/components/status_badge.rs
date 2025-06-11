@@ -35,6 +35,8 @@ pub fn StatusBadge(status: StatusProp) -> Element {
             },
             Some(report.to_string()),
         ),
+        Status::Resetting => ("badge-warning", rsx! { "Stopping..." }, None),
+        Status::Abandoned => unreachable!(),
     };
 
     rsx! {
