@@ -12,7 +12,7 @@ use color_eyre::eyre::{OptionExt, Result, eyre};
 // Local Crate Imports
 use crate::{
     cancellable_timer::CancellableTimer,
-    job::{Job, Status},
+    job::{Job, Status as JobStatus},
     on_update::{OnUpdate, OnUpdateCallback},
     worker_pool::WorkerPool,
     workflow::Workflow,
@@ -78,15 +78,16 @@ impl Queue {
 
     #[must_use]
     pub fn finished(&self) -> bool {
-        self.jobs
-            .read()
-            .unwrap()
-            .iter()
-            .all(|job| matches!(job.status(), Status::Completed(..) | Status::Failed(..)))
+        self.jobs.read().unwrap().iter().all(|job| {
+            matches!(
+                job.status(),
+                JobStatus::Completed(..) | JobStatus::Failed(..)
+            )
+        })
     }
 
     #[must_use]
-    pub fn jobs(&self) -> Vec<(String, Status)> {
+    pub fn jobs(&self) -> Vec<(String, JobStatus)> {
         self.jobs
             .read()
             .unwrap()
@@ -194,7 +195,7 @@ impl Queue {
             .read()
             .unwrap()
             .iter()
-            .filter(|job| matches!(job.status(), Status::Queued))
+            .filter(|job| matches!(job.status(), JobStatus::Queued))
             .count();
         let available_workers = self.worker_pool.available_workers();
         let new_workers = cmp::min(queued_jobs, available_workers);
@@ -208,7 +209,7 @@ impl Queue {
         self.stagger_timer.cancel();
 
         for job in self.jobs.read().unwrap().iter() {
-            if let Status::Running(..) = job.status() {
+            if let JobStatus::Running(..) = job.status() {
                 job.quiet_reset()?;
             }
         }
@@ -332,7 +333,7 @@ impl Queue {
         };
 
         while let Some((job, timer_guard)) = next_job_staggered() {
-            // SAFETY: The call to `next_job_staggered()` should only ever return `Status::Queued` `Job`s, so
+            // SAFETY: The call to `next_job_staggered()` should only ever return `JobStatus::Queued` `Job`s, so
             // `Job.run()` shouldn't ever fail!
             job.start().unwrap();
 
@@ -356,7 +357,7 @@ impl Queue {
         jobs.read()
             .unwrap()
             .iter()
-            .find(|job| matches!(job.status(), Status::Queued))
+            .find(|job| matches!(job.status(), JobStatus::Queued))
             .cloned()
     }
 }
@@ -371,7 +372,7 @@ mod tests {
 
     use crate::{
         assert_unpark_within_ms,
-        job::StatusDiscriminant::{self, *},
+        job::StatusDiscriminant::{self as JobStatusDiscriminant, *},
         worker_pool::tests::{ThreadParker, sleep_ms},
         workflow::tests::{
             BASE_WORKFLOW, MODIFICATIONS_FILE, PROTEIN_FASTA_FILE, SAMPLE_FILES, WORKFLOW_NAME,
@@ -387,7 +388,7 @@ mod tests {
     const FAST_PATH: &str = "tests/scripts/queue-fast";
     const SLOW_PATH: &str = "tests/scripts/queue-slow";
 
-    fn job_statuses(queue: &Queue) -> Vec<StatusDiscriminant> {
+    fn job_statuses(queue: &Queue) -> Vec<JobStatusDiscriminant> {
         queue
             .jobs()
             .into_iter()
@@ -422,11 +423,11 @@ mod tests {
 
         let (name, status) = &jobs[0];
         assert_eq!(name, WT_WORKFLOW_NAME);
-        assert!(matches!(status, Status::Queued));
+        assert!(matches!(status, JobStatus::Queued));
 
         let (name, status) = &jobs[1];
         assert_eq!(name, LDT_WORKFLOW_NAME);
-        assert!(matches!(status, Status::Queued));
+        assert!(matches!(status, JobStatus::Queued));
     }
 
     #[test]
@@ -448,7 +449,7 @@ mod tests {
 
         let (name, status) = &jobs[0];
         assert_eq!(name, WORKFLOW_NAME);
-        assert!(matches!(status, Status::Queued));
+        assert!(matches!(status, JobStatus::Queued));
     }
 
     #[test]
@@ -1156,7 +1157,7 @@ mod tests {
         unsafe { with_test_path(FAST_PATH, test_code) }
 
         let updates = updates.lock().unwrap();
-        let expected: &[&[(&[StatusDiscriminant], bool)]] = &[
+        let expected: &[&[(&[JobStatusDiscriminant], bool)]] = &[
             // `queue.queue_grouped_job()`
             &[(&[Queued, Queued, Queued], false)],
             // `queue.run()`
