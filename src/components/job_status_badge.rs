@@ -1,17 +1,17 @@
 use dioxus::prelude::*;
 
-use byos_queuer::job::Status;
+use byos_queuer::job::Status as JobStatus;
 
 use crate::components::run_timer::RunTime;
 
 #[derive(Clone)]
-pub(super) struct StatusProp(pub Status);
+pub(super) struct JobStatusProp(pub JobStatus);
 
 #[component]
-pub fn StatusBadge(status: StatusProp) -> Element {
+pub fn JobStatusBadge(status: JobStatusProp) -> Element {
     let (color_class, content, tooltip) = match status.0 {
-        Status::Queued => ("badge-neutral", rsx! { "Queued" }, None),
-        Status::Running(_, instant) => (
+        JobStatus::Queued => ("badge-neutral", rsx! { "Queued" }, None),
+        JobStatus::Running(_, instant) => (
             "badge-primary",
             rsx! {
                 "Running "
@@ -19,7 +19,7 @@ pub fn StatusBadge(status: StatusProp) -> Element {
             },
             None,
         ),
-        Status::Completed(duration) => (
+        JobStatus::Completed(duration) => (
             "badge-success",
             rsx! {
                 "Completed "
@@ -27,7 +27,7 @@ pub fn StatusBadge(status: StatusProp) -> Element {
             },
             None,
         ),
-        Status::Failed(report, duration) => (
+        JobStatus::Failed(report, duration) => (
             "badge-error",
             rsx! {
                 "Failed "
@@ -35,8 +35,8 @@ pub fn StatusBadge(status: StatusProp) -> Element {
             },
             Some(report.to_string()),
         ),
-        Status::Resetting => ("badge-warning", rsx! { "Stopping..." }, None),
-        Status::Abandoned => unreachable!(),
+        JobStatus::Resetting => ("badge-warning", rsx! { "Stopping..." }, None),
+        JobStatus::Abandoned => unreachable!(),
     };
 
     rsx! {
@@ -49,20 +49,20 @@ pub fn StatusBadge(status: StatusProp) -> Element {
     }
 }
 
-impl From<Status> for StatusProp {
-    fn from(value: Status) -> Self {
+impl From<JobStatus> for JobStatusProp {
+    fn from(value: JobStatus) -> Self {
         Self(value)
     }
 }
 
 // NOTE: The `Running` and `Failed` statuses contain fields that cannot be tested for equality, so this implementation
 // simply ignores those fields. This means that statuses can be `PartialEq` whilst actually being different values! To
-// avoid introducing that "buggy" behaviour in the public `job::Status` struct, I'm implementing it for this private
-// `StatusProps` wrapper instead
-impl PartialEq for StatusProp {
+// avoid introducing that "buggy" behaviour in the public `JobStatus` struct, I'm implementing it for this private
+// `JobStatusProp` wrapper instead
+impl PartialEq for JobStatusProp {
     fn eq(&self, other: &Self) -> bool {
-        // NOTE: Saves me needing to retype `Status::` a million times!
-        use Status::*;
+        // NOTE: Saves me needing to retype `JobStatus::` a million times!
+        use JobStatus::*;
 
         // NOTE: It would be really nice if I could cut down on the repetition and group all of this into one call to
         // `matches!(..)`, but that's blocked on https://github.com/rust-lang/rust/issues/129967
