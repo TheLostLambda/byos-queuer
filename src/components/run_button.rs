@@ -3,28 +3,33 @@
 // `#[expect(...)]` inside of the `#[component]` macro
 #![expect(clippy::derive_partial_eq_without_eq)]
 
+use byos_queuer::queue::Status as QueueStatus;
 use dioxus::prelude::*;
 
 use crate::STATE;
 
 #[component]
-pub fn RunButton(running: bool, finished: bool) -> Element {
-    let color_class = if running { "btn-error" } else { "btn-success" };
+pub fn RunButton(status: QueueStatus) -> Element {
+    let color_class = if status == QueueStatus::Running {
+        "btn-error"
+    } else {
+        "btn-success"
+    };
 
     rsx! {
         button {
             class: "btn btn-block {color_class}",
-            disabled: finished,
+            disabled: status == QueueStatus::Finished,
             onclick: move |_| {
                 let queue = STATE.read().unwrap();
-                if running {
+                if status == QueueStatus::Running {
                     queue.cancel().unwrap();
                 } else {
                     queue.run().unwrap();
                 }
             },
 
-            if running {
+            if status == QueueStatus::Running {
                 "Cancel"
             } else {
                 "Run"

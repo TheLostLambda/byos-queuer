@@ -27,6 +27,14 @@ pub struct Queue {
     on_update: OnUpdate,
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum Status {
+    Ready,
+    Running,
+    Stopping,
+    Finished,
+}
+
 impl Queue {
     pub fn new(workers: usize, stagger_duration: Duration) -> Result<Self> {
         let on_update = OnUpdate::new();
@@ -72,18 +80,16 @@ impl Queue {
     // Getters ---------------------------------------------------------------------------------------------------------
 
     #[must_use]
-    pub fn running(&self) -> bool {
-        self.worker_pool.running()
-    }
-
-    #[must_use]
-    pub fn finished(&self) -> bool {
-        self.jobs.read().unwrap().iter().all(|job| {
-            matches!(
-                job.status(),
-                JobStatus::Completed(..) | JobStatus::Failed(..)
-            )
-        })
+    pub fn status(&self) -> Status {
+        if self.running() && self.cancelled() {
+            Status::Stopping
+        } else if self.finished() {
+            Status::Finished
+        } else if self.running() {
+            Status::Running
+        } else {
+            Status::Ready
+        }
     }
 
     #[must_use]
@@ -271,6 +277,23 @@ impl Queue {
         Ok(())
     }
 
+    fn running(&self) -> bool {
+        self.worker_pool.running()
+    }
+
+    fn cancelled(&self) -> bool {
+        self.stagger_timer.cancelled()
+    }
+
+    fn finished(&self) -> bool {
+        self.jobs.read().unwrap().iter().all(|job| {
+            matches!(
+                job.status(),
+                JobStatus::Completed(..) | JobStatus::Failed(..)
+            )
+        })
+    }
+
     pub fn queue_job(
         &self,
         base_workflow: impl AsRef<Path> + Copy,
@@ -345,10 +368,6 @@ impl Queue {
 
             job.wait();
         }
-    }
-
-    fn cancelled(&self) -> bool {
-        self.stagger_timer.cancelled()
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -1020,7 +1039,7 @@ mod tests {
                 updates
                     .lock()
                     .unwrap()
-                    .push((job_statuses(&queue), queue.running()));
+                    .push((job_statuses(&queue), queue.status()));
                 thread_parker.unpark();
             }
         });
@@ -1157,52 +1176,52 @@ mod tests {
         unsafe { with_test_path(FAST_PATH, test_code) }
 
         let updates = updates.lock().unwrap();
-        let expected: &[&[(&[JobStatusDiscriminant], bool)]] = &[
+        let expected: &[&[(&[JobStatusDiscriminant], Status)]] = &[
             // `queue.queue_grouped_job()`
-            &[(&[Queued, Queued, Queued], false)],
+            &[(&[Queued, Queued, Queued], Status::Ready)],
             // `queue.run()`
-            &[(&[Queued, Queued, Queued], true)],
-            &[(&[Running, Queued, Queued], true)],
-            &[(&[Running, Running, Queued], true)],
-            &[(&[Running, Running, Running], true)],
-            &[(&[Failed, Running, Running], true)],
+            &[(&[Queued, Queued, Queued], Status::Running)],
+            &[(&[Running, Queued, Queued], Status::Running)],
+            &[(&[Running, Running, Queued], Status::Running)],
+            &[(&[Running, Running, Running], Status::Running)],
+            &[(&[Failed, Running, Running], Status::Running)],
             // `queue.reset()`
-            &[(&[Queued, Stopping, Stopping], true)],
+            &[(&[Queued, Stopping, Stopping], Status::Running)],
             &[
-                (&[Queued, Queued, Stopping], true),
-                (&[Queued, Stopping, Queued], true),
+                (&[Queued, Queued, Stopping], Status::Running),
+                (&[Queued, Stopping, Queued], Status::Running),
                 // NOTE: It's possible that both `Stopping` `Job`s finish at around the same time and, even if there
                 // will still be two calls to `on_update`, the first of those calls could observe this state
-                (&[Queued, Queued, Queued], true),
+                (&[Queued, Queued, Queued], Status::Running),
             ],
-            &[(&[Queued, Queued, Queued], true)],
-            &[(&[Running, Queued, Queued], true)],
-            &[(&[Running, Running, Queued], true)],
+            &[(&[Queued, Queued, Queued], Status::Running)],
+            &[(&[Running, Queued, Queued], Status::Running)],
+            &[(&[Running, Running, Queued], Status::Running)],
             // `queue.reset_job(0)`
-            &[(&[Stopping, Running, Queued], true)],
-            &[(&[Queued, Running, Queued], true)],
-            &[(&[Running, Running, Queued], true)],
-            &[(&[Running, Running, Running], true)],
-            &[(&[Failed, Running, Running], true)],
-            &[(&[Failed, Running, Completed], true)],
+            &[(&[Stopping, Running, Queued], Status::Running)],
+            &[(&[Queued, Running, Queued], Status::Running)],
+            &[(&[Running, Running, Queued], Status::Running)],
+            &[(&[Running, Running, Running], Status::Running)],
+            &[(&[Failed, Running, Running], Status::Running)],
+            &[(&[Failed, Running, Completed], Status::Running)],
             // `queue.cancel()`
-            &[(&[Failed, Stopping, Completed], true)],
-            &[(&[Failed, Queued, Completed], true)],
-            &[(&[Failed, Queued, Completed], false)],
+            &[(&[Failed, Stopping, Completed], Status::Stopping)],
+            &[(&[Failed, Queued, Completed], Status::Stopping)],
+            &[(&[Failed, Queued, Completed], Status::Ready)],
             // `queue.reset()`
-            &[(&[Queued, Queued, Queued], false)],
+            &[(&[Queued, Queued, Queued], Status::Ready)],
             // `queue.clear()`
-            &[(&[], false)],
+            &[(&[], Status::Finished)],
             // `queue.queue_jobs()`
-            &[(&[Queued, Queued], false)],
+            &[(&[Queued, Queued], Status::Ready)],
             // `queue.run()`
-            &[(&[Queued, Queued], true)],
-            &[(&[Running, Queued], true)],
+            &[(&[Queued, Queued], Status::Running)],
+            &[(&[Running, Queued], Status::Running)],
             // `queue.remove_job(0)`
-            &[(&[Queued], true)],
+            &[(&[Queued], Status::Running)],
             // `queue.clear()`
-            &[(&[], true)],
-            &[(&[], false)],
+            &[(&[], Status::Stopping)],
+            &[(&[], Status::Finished)],
         ];
 
         for (index, (update, &expected)) in updates
