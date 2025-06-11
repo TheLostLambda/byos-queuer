@@ -154,7 +154,7 @@ impl Queue {
             jobs_guard.remove(index)
         } else {
             return Err(eyre!(
-                "tried to remove `Job` {index}, but there are only {jobs_len} `Job`s in the `Queue`"
+                "tried to remove the `Job` at index {index}, but there are only {jobs_len} `Job`s in the `Queue`"
             ));
         };
         drop(jobs_guard);
@@ -165,6 +165,26 @@ impl Queue {
         self.on_update.call();
 
         Ok(())
+    }
+
+    pub fn reset_job(&self, index: usize) -> Result<()> {
+        let job_to_reset = self.jobs.read().unwrap().get(index).cloned();
+
+        if let Some(job_to_reset) = job_to_reset {
+            job_to_reset.reset()?;
+
+            // NOTE: Resetting a `Job` effectively re-queues it — just like ordinary queuing, this re-queuing might
+            // require spawning a new worker
+            self.spawn_worker_if_running();
+
+            Ok(())
+        } else {
+            let jobs_len = self.jobs.read().unwrap().len();
+
+            Err(eyre!(
+                "tried to reset the `Job` at index {index}, but there are only {jobs_len} `Job`s in the `Queue`"
+            ))
+        }
     }
 
     // Queue Control ---------------------------------------------------------------------------------------------------
@@ -864,7 +884,111 @@ mod tests {
 
             assert_eq!(
                 queue.remove_job(0).unwrap_err().to_string(),
-                "tried to remove `Job` 0, but there are only 0 `Job`s in the `Queue`"
+                "tried to remove the `Job` at index 0, but there are only 0 `Job`s in the `Queue`"
+            );
+        };
+
+        unsafe { with_test_path(FAST_PATH, test_code) }
+    }
+
+    #[test]
+    fn reset_job() {
+        let temporary_directory = tempdir().unwrap();
+
+        // First, queue some initial `Job`s
+        let queue = Queue::new(2, Duration::from_millis(20)).unwrap();
+
+        queue
+            .queue_grouped_job(
+                BASE_WORKFLOW,
+                SAMPLE_FILES,
+                PROTEIN_FASTA_FILE,
+                Some(MODIFICATIONS_FILE),
+                &temporary_directory,
+            )
+            .unwrap();
+
+        queue
+            .queue_jobs(
+                BASE_WORKFLOW,
+                SAMPLE_FILES,
+                PROTEIN_FASTA_FILE,
+                Some(MODIFICATIONS_FILE),
+                &temporary_directory,
+            )
+            .unwrap();
+
+        assert!(!queue.running());
+        assert_eq!(queue.worker_pool.available_workers(), 2);
+        assert_eq!(job_statuses(&queue), [Queued, Queued, Queued]);
+
+        // Then, run the queue and reset some jobs whilst it's running and after it's finished
+        // NOTE: It's a test, so I think this is alright for now
+        #[expect(clippy::cognitive_complexity)]
+        let test_code = || {
+            queue.run().unwrap();
+
+            assert!(queue.running());
+
+            sleep_ms(5);
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert_eq!(job_statuses(&queue), [Running, Queued, Queued]);
+
+            sleep_ms(25);
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert_eq!(job_statuses(&queue), [Running, Running, Queued]);
+
+            queue.reset_job(0).unwrap();
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert_eq!(job_statuses(&queue), [Queued, Running, Queued]);
+
+            sleep_ms(20);
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert_eq!(job_statuses(&queue), [Running, Running, Queued]);
+
+            sleep_ms(20);
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert_eq!(job_statuses(&queue), [Running, Failed, Running]);
+
+            sleep_ms(20);
+
+            assert_eq!(queue.worker_pool.available_workers(), 1);
+            assert_eq!(job_statuses(&queue), [Completed, Failed, Running]);
+
+            queue.reset_job(0).unwrap();
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert_eq!(job_statuses(&queue), [Queued, Failed, Running]);
+
+            sleep_ms(5);
+
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert_eq!(job_statuses(&queue), [Running, Failed, Running]);
+
+            sleep_ms(40);
+
+            assert!(!queue.running());
+            assert!(!queue.ready());
+            assert!(!queue.cancelled());
+            assert_eq!(queue.worker_pool.available_workers(), 2);
+            assert_eq!(job_statuses(&queue), [Completed, Failed, Completed]);
+
+            queue.reset_job(1).unwrap();
+
+            assert!(!queue.running());
+            assert!(queue.ready());
+            assert!(!queue.cancelled());
+            assert_eq!(queue.worker_pool.available_workers(), 2);
+            assert_eq!(job_statuses(&queue), [Completed, Queued, Completed]);
+
+            assert_eq!(
+                queue.reset_job(4).unwrap_err().to_string(),
+                "tried to reset the `Job` at index 4, but there are only 3 `Job`s in the `Queue`"
             );
         };
 
@@ -943,9 +1067,16 @@ mod tests {
             assert_unpark_within_ms!(1);
             assert_unpark_within_ms!(5);
             assert_unpark_within_ms!(15);
+
+            // `queue.reset_job(0)` ------------------------------------------------------------------------------------
+
+            queue.reset_job(0).unwrap();
+
+            assert_unpark_within_ms!(1);
             assert_unpark_within_ms!(15);
-            assert_unpark_within_ms!(25);
-            assert_unpark_within_ms!(25);
+            assert_unpark_within_ms!(15);
+            assert_unpark_within_ms!(35);
+            assert_unpark_within_ms!(15);
 
             // `queue.cancel()` ----------------------------------------------------------------------------------------
 
@@ -987,7 +1118,7 @@ mod tests {
             assert_unpark_within_ms!(1);
             assert_unpark_within_ms!(5);
 
-            // `queue.remove_job()` ------------------------------------------------------------------------------------
+            // `queue.remove_job(0)` -----------------------------------------------------------------------------------
 
             queue.remove_job(0).unwrap();
 
@@ -1017,6 +1148,9 @@ mod tests {
             (&[Queued, Queued, Queued], true),
             (&[Running, Queued, Queued], true),
             (&[Running, Running, Queued], true),
+            // `queue.reset_job(0)`
+            (&[Queued, Running, Queued], true),
+            (&[Running, Running, Queued], true),
             (&[Running, Running, Running], true),
             (&[Failed, Running, Running], true),
             (&[Failed, Running, Completed], true),
@@ -1032,7 +1166,7 @@ mod tests {
             // `queue.run()`
             (&[Queued, Queued], true),
             (&[Running, Queued], true),
-            // `queue.remove_job()`
+            // `queue.remove_job(0)`
             (&[Queued], true),
             // `queue.clear()`
             (&[], true),
