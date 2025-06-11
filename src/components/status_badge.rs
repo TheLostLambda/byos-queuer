@@ -13,31 +13,36 @@ pub fn StatusBadge(status: StatusProp) -> Element {
         Status::Queued => ("badge-neutral", rsx! { "Queued" }, None),
         Status::Running(_, instant) => (
             "badge-primary",
-            rsx! { "Running ", RunTime { time: instant } },
+            rsx! {
+                "Running "
+                RunTime { time: instant }
+            },
             None,
         ),
         Status::Completed(duration) => (
             "badge-success",
-            rsx! { "Completed ", RunTime { time: duration } },
+            rsx! {
+                "Completed "
+                RunTime { time: duration }
+            },
             None,
         ),
         Status::Failed(report, duration) => (
             "badge-error",
-            rsx! { "Failed ", RunTime { time: duration } },
+            rsx! {
+                "Failed "
+                RunTime { time: duration }
+            },
             Some(report.to_string()),
         ),
     };
 
     rsx! {
-        div {
-            class: "tooltip tooltip-left badge {color_class} font-mono",
+        div { class: "tooltip tooltip-left badge {color_class} font-mono",
 
-            div {
-                class: "tooltip-content",
-                { tooltip }
-            }
+            div { class: "tooltip-content", {tooltip} }
 
-            { content }
+            {content}
         }
     }
 }

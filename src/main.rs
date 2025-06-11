@@ -65,12 +65,9 @@ fn App() -> Element {
         document::Link { rel: "icon", href: FAVICON }
         document::Stylesheet { href: TAILWIND_CSS }
 
-        Header {},
+        Header {}
 
-        main {
-            class: "card w-full bg-base-100 shadow-sm",
-            Jobs {}
-        }
+        main { class: "card w-full bg-base-100 shadow-sm", Jobs {} }
     }
 }
 

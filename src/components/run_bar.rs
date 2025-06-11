@@ -10,8 +10,7 @@ use crate::components::run_button::RunButton;
 #[component]
 pub fn RunBar(running: bool, ready: bool) -> Element {
     rsx! {
-        div {
-            class: "flex items-center justify-between",
+        div { class: "flex items-center justify-between",
 
             RunButton { running, ready }
         }

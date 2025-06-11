@@ -16,30 +16,19 @@ pub fn Delete(index: usize) -> Element {
             onclick: move |_| STATE.read().unwrap().remove_job(index).unwrap(),
 
             svg {
-                xmlns: "http://www.w3.org/2000/svg",
-                width: "24",
-                height: "24",
-                view_box: "0 0 24 24",
+                class: "lucide lucide-circle-x-icon lucide-circle-x",
                 fill: "none",
+                height: "24",
                 stroke: "currentColor",
-                stroke_width: "2",
                 stroke_linecap: "round",
                 stroke_linejoin: "round",
-                class: "lucide lucide-circle-x-icon lucide-circle-x",
-
-                circle {
-                    cx: "12",
-                    cy: "12",
-                    r: "10"
-                }
-
-                path {
-                    d: "m15 9-6 6",
-                }
-
-                path {
-                    d: "m9 9 6 6",
-                }
+                stroke_width: "2",
+                view_box: "0 0 24 24",
+                width: "24",
+                xmlns: "http://www.w3.org/2000/svg",
+                circle { cx: "12", cy: "12", r: "10" }
+                path { d: "m15 9-6 6" }
+                path { d: "m9 9 6 6" }
             }
         }
     }

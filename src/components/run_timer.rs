@@ -28,9 +28,7 @@ pub fn RunTime(#[props(into)] time: InstantOrDuration) -> Element {
     };
     let run_time = format_duration(duration);
 
-    rsx! {
-        "({run_time})"
-    }
+    rsx! { "({run_time})" }
 }
 
 impl From<Instant> for InstantOrDuration {
