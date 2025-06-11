@@ -2,6 +2,7 @@ mod delete;
 mod header;
 mod job;
 mod jobs;
+mod reset;
 mod run_bar;
 mod run_button;
 mod run_timer;

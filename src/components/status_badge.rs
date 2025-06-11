@@ -5,7 +5,7 @@ use byos_queuer::job::Status;
 use crate::components::run_timer::RunTime;
 
 #[derive(Clone)]
-pub(super) struct StatusProp(Status);
+pub(super) struct StatusProp(pub Status);
 
 #[component]
 pub fn StatusBadge(status: StatusProp) -> Element {
