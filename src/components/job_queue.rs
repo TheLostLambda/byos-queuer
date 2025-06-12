@@ -18,7 +18,7 @@ pub fn JobQueue() -> Element {
 
     rsx! {
         div { class: "flex flex-col card-body",
-            TopBar {}
+            TopBar { status }
             ol { class: "list bg-base-100 rounded-box",
 
                 for (index , (name , status)) in jobs.into_iter().enumerate() {
