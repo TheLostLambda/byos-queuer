@@ -29,9 +29,19 @@ pub struct Queue {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Status {
+    /// The `Queue` is stopped and contains no `Job`s
+    Empty,
+    /// The `Queue` is stopped and contains only `Queued` `Job`s
     Ready,
+    /// The `Queue` is running but contains no `Running` `Job`s
+    Starting,
+    /// The `Queue` is running and contains at least one `Running` `Job`
     Running,
+    /// The `Queue` is still running but has been cancelled or contains only finished (`Completed` / `Failed`) `Job`s
     Stopping,
+    /// The `Queue` is stopped and contains both finished (`Completed` / `Failed`) and `Queued` `Job`s
+    Paused,
+    /// The `Queue` is stopped and contains only finished (`Completed` / `Failed`) `Job`s
     Finished,
 }
 
@@ -85,14 +95,22 @@ impl Queue {
         // running. This prevents other threads from changing `self.jobs` between the first and second half of an `&&`
         // expression, which could otherwise lead to us reaching the `unreachable!()` branch
         let _jobs_guard = self.jobs.read().unwrap();
-        if self.running() && self.cancelled() {
+        if self.running() && (self.cancelled() || self.finished()) {
             Status::Stopping
-        } else if self.finished() {
-            Status::Finished
+        } else if self.running() && self.no_running_jobs() {
+            Status::Starting
         } else if self.running() {
             Status::Running
-        } else {
+        } else if self.empty() {
+            Status::Empty
+        } else if self.finished() {
+            Status::Finished
+        } else if self.paused() {
+            Status::Paused
+        } else if self.only_queued_jobs() {
             Status::Ready
+        } else {
+            unreachable!();
         }
     }
 
@@ -281,6 +299,10 @@ impl Queue {
         Ok(())
     }
 
+    fn empty(&self) -> bool {
+        self.jobs.read().unwrap().is_empty()
+    }
+
     fn running(&self) -> bool {
         self.worker_pool.running()
     }
@@ -296,6 +318,49 @@ impl Queue {
                 JobStatus::Completed(..) | JobStatus::Failed(..)
             )
         })
+    }
+
+    fn paused(&self) -> bool {
+        // DESIGN: More imparative approach here so that I can look for both types of `Job` in a single pass and break
+        // out of the loop as soon as I've found one of each. This is like `Iterator::any()` but looking for multiple
+        // predicates at once
+        let mut contains_queued = false;
+        let mut contains_finished = false;
+
+        for job in self.jobs.read().unwrap().iter() {
+            let status = job.status();
+
+            if !contains_queued && matches!(status, JobStatus::Queued) {
+                contains_queued = true;
+            } else if !contains_finished
+                && matches!(status, JobStatus::Completed(..) | JobStatus::Failed(..))
+            {
+                contains_finished = true;
+            }
+
+            if contains_queued && contains_finished {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn only_queued_jobs(&self) -> bool {
+        self.jobs
+            .read()
+            .unwrap()
+            .iter()
+            .all(|job| matches!(job.status(), JobStatus::Queued))
+    }
+
+    fn no_running_jobs(&self) -> bool {
+        !self
+            .jobs
+            .read()
+            .unwrap()
+            .iter()
+            .any(|job| matches!(job.status(), JobStatus::Running(..)))
     }
 
     pub fn queue_job(
@@ -1122,6 +1187,16 @@ mod tests {
             assert_unpark_within_ms!(thread_parker, 1);
             assert!(thread_parker.no_missed_parks());
 
+            // `queue.run()` -------------------------------------------------------------------------------------------
+
+            queue.run().unwrap();
+
+            assert_unpark_within_ms!(thread_parker, 1);
+            assert_unpark_within_ms!(thread_parker, 5);
+            assert_unpark_within_ms!(thread_parker, 80);
+            assert_unpark_within_ms!(thread_parker, 1);
+            assert!(thread_parker.no_missed_parks());
+
             // `queue.reset()` -----------------------------------------------------------------------------------------
 
             queue.reset().unwrap();
@@ -1184,21 +1259,21 @@ mod tests {
             // `queue.queue_grouped_job()`
             &[(&[Queued, Queued, Queued], Status::Ready)],
             // `queue.run()`
-            &[(&[Queued, Queued, Queued], Status::Running)],
+            &[(&[Queued, Queued, Queued], Status::Starting)],
             &[(&[Running, Queued, Queued], Status::Running)],
             &[(&[Running, Running, Queued], Status::Running)],
             &[(&[Running, Running, Running], Status::Running)],
             &[(&[Failed, Running, Running], Status::Running)],
             // `queue.reset()`
-            &[(&[Queued, Stopping, Stopping], Status::Running)],
+            &[(&[Queued, Stopping, Stopping], Status::Starting)],
             &[
-                (&[Queued, Queued, Stopping], Status::Running),
-                (&[Queued, Stopping, Queued], Status::Running),
+                (&[Queued, Queued, Stopping], Status::Starting),
+                (&[Queued, Stopping, Queued], Status::Starting),
                 // NOTE: It's possible that both `Stopping` `Job`s finish at around the same time and, even if there
                 // will still be two calls to `on_update`, the first of those calls could observe this state
-                (&[Queued, Queued, Queued], Status::Running),
+                (&[Queued, Queued, Queued], Status::Starting),
             ],
-            &[(&[Queued, Queued, Queued], Status::Running)],
+            &[(&[Queued, Queued, Queued], Status::Starting)],
             &[(&[Running, Queued, Queued], Status::Running)],
             &[(&[Running, Running, Queued], Status::Running)],
             // `queue.reset_job(0)`
@@ -1211,21 +1286,26 @@ mod tests {
             // `queue.cancel()`
             &[(&[Failed, Stopping, Completed], Status::Stopping)],
             &[(&[Failed, Queued, Completed], Status::Stopping)],
-            &[(&[Failed, Queued, Completed], Status::Ready)],
+            &[(&[Failed, Queued, Completed], Status::Paused)],
+            // `queue.run()`
+            &[(&[Failed, Queued, Completed], Status::Starting)],
+            &[(&[Failed, Running, Completed], Status::Running)],
+            &[(&[Failed, Completed, Completed], Status::Stopping)],
+            &[(&[Failed, Completed, Completed], Status::Finished)],
             // `queue.reset()`
             &[(&[Queued, Queued, Queued], Status::Ready)],
             // `queue.clear()`
-            &[(&[], Status::Finished)],
+            &[(&[], Status::Empty)],
             // `queue.queue_jobs()`
             &[(&[Queued, Queued], Status::Ready)],
             // `queue.run()`
-            &[(&[Queued, Queued], Status::Running)],
+            &[(&[Queued, Queued], Status::Starting)],
             &[(&[Running, Queued], Status::Running)],
             // `queue.remove_job(0)`
-            &[(&[Queued], Status::Running)],
+            &[(&[Queued], Status::Starting)],
             // `queue.clear()`
             &[(&[], Status::Stopping)],
-            &[(&[], Status::Finished)],
+            &[(&[], Status::Empty)],
         ];
 
         for (index, (update, &expected)) in updates

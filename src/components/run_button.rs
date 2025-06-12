@@ -13,7 +13,7 @@ pub fn RunButton(status: QueueStatus) -> Element {
     let (color_class, content) = match status {
         QueueStatus::Running => ("btn-error", rsx! { "Cancel" }),
         QueueStatus::Stopping => ("btn-warning", rsx! { "Stopping..." }),
-        QueueStatus::Ready | QueueStatus::Finished => ("btn-success", rsx! { "Run" }),
+        _ => ("btn-success", rsx! { "Run" }),
     };
 
     rsx! {
