@@ -547,7 +547,7 @@ mod tests {
         // First, queue some `Job`s
         let queue = Queue::new(3, Duration::from_millis(10)).unwrap();
 
-        assert!(queue.only_finished_jobs());
+        assert_eq!(queue.status(), Status::Empty);
 
         queue
             .queue_jobs(
@@ -569,8 +569,7 @@ mod tests {
             )
             .unwrap();
 
-        assert!(!queue.workers_running());
-        assert!(!queue.only_finished_jobs());
+        assert_eq!(queue.status(), Status::Ready);
 
         let expected_job_names = [WT_WORKFLOW_NAME, LDT_WORKFLOW_NAME, WORKFLOW_NAME];
         let jobs = queue.jobs();
@@ -582,10 +581,11 @@ mod tests {
         let test_code = || {
             queue.run().unwrap();
 
-            assert!(queue.workers_running());
+            assert_eq!(queue.status(), Status::Starting);
 
             sleep_ms(5);
 
+            assert_eq!(queue.status(), Status::Running);
             assert_eq!(job_statuses(&queue), [Running, Queued, Queued]);
 
             sleep_ms(15);
@@ -608,8 +608,7 @@ mod tests {
 
             assert_eq!(job_statuses(&queue), [Failed, Completed, Completed]);
 
-            assert!(!queue.workers_running());
-            assert!(queue.only_finished_jobs());
+            assert_eq!(queue.status(), Status::Finished);
         };
 
         unsafe { with_test_path(FAST_PATH, test_code) }
@@ -632,7 +631,7 @@ mod tests {
             )
             .unwrap();
 
-        assert!(!queue.workers_running());
+        assert_eq!(queue.status(), Status::Ready);
         assert_eq!(queue.worker_pool.available_workers(), 2);
         assert_eq!(job_statuses(&queue), [Queued]);
 
@@ -640,10 +639,11 @@ mod tests {
         let test_code = || {
             queue.run().unwrap();
 
-            assert!(queue.workers_running());
+            assert_eq!(queue.status(), Status::Starting);
 
             sleep_ms(5);
 
+            assert_eq!(queue.status(), Status::Running);
             assert_eq!(queue.worker_pool.available_workers(), 1);
             assert_eq!(job_statuses(&queue), [Running]);
 
@@ -675,7 +675,7 @@ mod tests {
 
             sleep_ms(40);
 
-            assert!(!queue.workers_running());
+            assert_eq!(queue.status(), Status::Finished);
             assert_eq!(queue.worker_pool.available_workers(), 2);
             assert_eq!(job_statuses(&queue), [Completed, Completed, Completed]);
         };
@@ -684,6 +684,8 @@ mod tests {
     }
 
     #[test]
+    // NOTE: It's a test, so I think this is alright for now
+    #[expect(clippy::too_many_lines)]
     fn reconfigure_when_stopped() {
         let temporary_directory = tempdir().unwrap();
 
@@ -702,7 +704,7 @@ mod tests {
                 .unwrap();
         }
 
-        assert!(!queue.workers_running());
+        assert_eq!(queue.status(), Status::Ready);
         assert_eq!(queue.worker_pool.available_workers(), 1);
         assert_eq!(job_statuses(&queue), [Queued, Queued]);
 
@@ -710,10 +712,11 @@ mod tests {
         let test_code = || {
             queue.run().unwrap();
 
-            assert!(queue.workers_running());
+            assert_eq!(queue.status(), Status::Starting);
 
             sleep_ms(5);
 
+            assert_eq!(queue.status(), Status::Running);
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Running, Queued]);
 
@@ -744,7 +747,7 @@ mod tests {
             assert_eq!(queue.worker_pool.available_workers(), 1);
             assert_eq!(job_statuses(&queue), [Completed, Completed]);
 
-            assert!(!queue.workers_running());
+            assert_eq!(queue.status(), Status::Finished);
         };
 
         unsafe { with_test_path(FAST_PATH, test_code) }
@@ -764,14 +767,17 @@ mod tests {
             )
             .unwrap();
 
+        assert_eq!(queue.status(), Status::Paused);
+
         // Run the queue again, making sure that our changes were applied and that `Job` history is retained
         let test_code = || {
             queue.run().unwrap();
 
-            assert!(queue.workers_running());
+            assert_eq!(queue.status(), Status::Starting);
 
             sleep_ms(10);
 
+            assert_eq!(queue.status(), Status::Running);
             assert_eq!(queue.worker_pool.available_workers(), 1);
             assert_eq!(
                 job_statuses(&queue),
@@ -806,7 +812,7 @@ mod tests {
                 [Completed, Completed, Failed, Completed]
             );
 
-            assert!(!queue.workers_running());
+            assert_eq!(queue.status(), Status::Finished);
         };
 
         unsafe { with_test_path(FAST_PATH, test_code) }
@@ -852,7 +858,7 @@ mod tests {
             )
             .unwrap();
 
-        assert!(!queue.workers_running());
+        assert_eq!(queue.status(), Status::Ready);
         assert_eq!(queue.worker_pool.available_workers(), 2);
         assert_eq!(job_statuses(&queue), [Queued, Queued, Queued]);
 
@@ -860,10 +866,11 @@ mod tests {
         let test_code = || {
             queue.run().unwrap();
 
-            assert!(queue.workers_running());
+            assert_eq!(queue.status(), Status::Starting);
 
             sleep_ms(5);
 
+            assert_eq!(queue.status(), Status::Running);
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Running, Queued, Queued]);
 
@@ -881,8 +888,7 @@ mod tests {
 
             sleep_ms(5);
 
-            assert!(!queue.workers_running());
-            assert!(!queue.only_finished_jobs());
+            assert_eq!(queue.status(), Status::Paused);
             assert!(queue.cancelled());
             assert_eq!(queue.worker_pool.available_workers(), 2);
             assert_eq!(job_statuses(&queue), [Completed, Queued, Queued]);
@@ -918,7 +924,7 @@ mod tests {
             )
             .unwrap();
 
-        assert!(!queue.workers_running());
+        assert_eq!(queue.status(), Status::Ready);
         assert_eq!(queue.worker_pool.available_workers(), 2);
         assert_eq!(job_statuses(&queue), [Queued, Queued, Queued]);
 
@@ -926,16 +932,17 @@ mod tests {
         let test_code = || {
             queue.run().unwrap();
 
-            assert!(queue.workers_running());
+            assert_eq!(queue.status(), Status::Starting);
 
             sleep_ms(5);
 
+            assert_eq!(queue.status(), Status::Running);
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Running, Queued, Queued]);
 
             queue.remove_job(1).unwrap();
 
-            assert!(queue.workers_running());
+            assert_eq!(queue.status(), Status::Running);
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Running, Queued]);
 
@@ -946,7 +953,7 @@ mod tests {
 
             queue.remove_job(0).unwrap();
 
-            assert!(queue.workers_running());
+            assert_eq!(queue.status(), Status::Running);
             assert_eq!(job_statuses(&queue), [Running]);
 
             sleep_ms(5);
@@ -963,7 +970,7 @@ mod tests {
             assert_eq!(queue.worker_pool.available_workers(), 2);
             assert_eq!(job_statuses(&queue), [Completed]);
 
-            assert!(!queue.workers_running());
+            assert_eq!(queue.status(), Status::Finished);
 
             queue.remove_job(0).unwrap();
             assert_eq!(job_statuses(&queue), []);
@@ -1004,7 +1011,7 @@ mod tests {
             )
             .unwrap();
 
-        assert!(!queue.workers_running());
+        assert_eq!(queue.status(), Status::Ready);
         assert_eq!(queue.worker_pool.available_workers(), 2);
         assert_eq!(job_statuses(&queue), [Queued, Queued, Queued]);
 
@@ -1014,10 +1021,11 @@ mod tests {
         let test_code = || {
             queue.run().unwrap();
 
-            assert!(queue.workers_running());
+            assert_eq!(queue.status(), Status::Starting);
 
             sleep_ms(5);
 
+            assert_eq!(queue.status(), Status::Running);
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Running, Queued, Queued]);
 
@@ -1063,17 +1071,13 @@ mod tests {
 
             sleep_ms(50);
 
-            assert!(!queue.workers_running());
-            assert!(queue.only_finished_jobs());
-            assert!(!queue.cancelled());
+            assert_eq!(queue.status(), Status::Finished);
             assert_eq!(queue.worker_pool.available_workers(), 2);
             assert_eq!(job_statuses(&queue), [Completed, Failed, Completed]);
 
             queue.reset_job(1).unwrap();
 
-            assert!(!queue.workers_running());
-            assert!(!queue.only_finished_jobs());
-            assert!(!queue.cancelled());
+            assert_eq!(queue.status(), Status::Paused);
             assert_eq!(queue.worker_pool.available_workers(), 2);
             assert_eq!(job_statuses(&queue), [Completed, Queued, Completed]);
 
