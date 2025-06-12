@@ -6,7 +6,7 @@ use crate::{
 };
 
 #[component]
-pub fn Jobs() -> Element {
+pub fn JobQueue() -> Element {
     use_hook(|| {
         STATE.read().unwrap().set_on_update(schedule_update());
     });

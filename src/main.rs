@@ -14,7 +14,7 @@ use dioxus::{
     prelude::*,
 };
 
-use components::{Header, Jobs};
+use components::{Header, JobQueue};
 
 pub const FAVICON: Asset = asset!("/assets/favicon.ico");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
@@ -67,7 +67,7 @@ fn App() -> Element {
 
         Header {}
 
-        main { class: "card w-full bg-base-100 shadow-sm", Jobs {} }
+        main { class: "card w-full bg-base-100 shadow-sm", JobQueue {} }
     }
 }
 
