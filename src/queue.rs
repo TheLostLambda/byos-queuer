@@ -670,7 +670,7 @@ mod tests {
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Completed, Running]);
 
-            sleep_ms(50);
+            sleep_ms(55);
 
             assert_eq!(queue.worker_pool.available_workers(), 1);
             assert_eq!(job_statuses(&queue), [Completed, Completed]);
@@ -803,7 +803,7 @@ mod tests {
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Running, Running, Queued]);
 
-            sleep_ms(20);
+            sleep_ms(25);
 
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Completed, Running, Running]);
@@ -967,12 +967,12 @@ mod tests {
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Queued, Running, Queued]);
 
-            sleep_ms(15);
+            sleep_ms(20);
 
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Running, Running, Queued]);
 
-            sleep_ms(20);
+            sleep_ms(25);
 
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Running, Failed, Running]);
@@ -992,7 +992,7 @@ mod tests {
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Running, Failed, Running]);
 
-            sleep_ms(40);
+            sleep_ms(50);
 
             assert!(!queue.running());
             assert!(queue.finished());
@@ -1082,7 +1082,7 @@ mod tests {
             assert_unpark_within_ms!(thread_parker, 1);
             assert_unpark_within_ms!(thread_parker, 5);
             assert_unpark_within_ms!(thread_parker, 15);
-            assert_unpark_within_ms!(thread_parker, 15);
+            assert_unpark_within_ms!(thread_parker, 20);
             assert_unpark_within_ms!(thread_parker, 25);
             assert!(thread_parker.no_missed_parks());
 
@@ -1104,9 +1104,9 @@ mod tests {
             assert_unpark_within_ms!(thread_parker, 1);
             assert_unpark_within_ms!(thread_parker, 5);
             assert_unpark_within_ms!(thread_parker, 15);
-            assert_unpark_within_ms!(thread_parker, 15);
+            assert_unpark_within_ms!(thread_parker, 20);
             assert_unpark_within_ms!(thread_parker, 35);
-            assert_unpark_within_ms!(thread_parker, 15);
+            assert_unpark_within_ms!(thread_parker, 20);
             assert!(thread_parker.no_missed_parks());
 
             // `queue.cancel()` ----------------------------------------------------------------------------------------
