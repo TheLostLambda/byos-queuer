@@ -12,7 +12,7 @@ pub fn ResetJob(index: usize) -> Element {
     rsx! {
         div {
             class: "tooltip",
-            "data-tip": "Reset this job",
+            "data-tip": "Reset job",
             onclick: move |_| STATE.read().unwrap().reset_job(index).unwrap(),
 
             ResetIcon {}

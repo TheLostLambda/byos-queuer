@@ -12,7 +12,7 @@ pub fn DeleteJob(index: usize) -> Element {
     rsx! {
         div {
             class: "tooltip",
-            "data-tip": "Delete this job",
+            "data-tip": "Delete job",
             onclick: move |_| STATE.read().unwrap().remove_job(index).unwrap(),
 
             DeleteIcon {}
