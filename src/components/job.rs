@@ -2,9 +2,9 @@ use byos_queuer::job::Status as JobStatus;
 use dioxus::prelude::*;
 
 use crate::components::{
-    delete::Delete,
+    delete_job::DeleteJob,
     job_status_badge::{JobStatusBadge, JobStatusProp},
-    reset::Reset,
+    reset_job::ResetJob,
 };
 
 #[component]
@@ -18,10 +18,10 @@ pub fn Job(index: usize, name: String, #[props(into)] status: JobStatusProp) -> 
             JobStatusBadge { status }
 
             if show_reset {
-                Reset { index }
+                ResetJob { index }
             }
 
-            Delete { index }
+            DeleteJob { index }
         }
     }
 }
