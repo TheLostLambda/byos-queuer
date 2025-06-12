@@ -1,3 +1,4 @@
+mod clear_queue;
 mod delete_icon;
 mod delete_job;
 mod header;
@@ -6,6 +7,7 @@ mod job_queue;
 mod job_status_badge;
 mod reset_icon;
 mod reset_job;
+mod reset_queue;
 mod run_bar;
 mod run_button;
 mod run_timer;
