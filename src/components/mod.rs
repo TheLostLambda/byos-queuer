@@ -9,6 +9,7 @@ mod reset_job;
 mod run_bar;
 mod run_button;
 mod run_timer;
+mod top_bar;
 
 pub use header::Header;
 pub use job_queue::JobQueue;

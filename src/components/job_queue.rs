@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     STATE,
-    components::{RunBar, job::Job},
+    components::{RunBar, job::Job, top_bar::TopBar},
 };
 
 #[component]
@@ -18,7 +18,7 @@ pub fn JobQueue() -> Element {
 
     rsx! {
         div { class: "flex flex-col card-body",
-            h2 { class: "card-title", "Queued Jobs" }
+            TopBar {}
             ol { class: "list bg-base-100 rounded-box",
 
                 for (index , (name , status)) in jobs.into_iter().enumerate() {
