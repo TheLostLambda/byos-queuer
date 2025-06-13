@@ -17,19 +17,20 @@ enum OnClick {
 #[component]
 pub fn RunButton(status: QueueStatus) -> Element {
     use OnClick::*;
+    use QueueStatus::*;
 
     let (color_class, content, onclick) = match status {
-        QueueStatus::Running => ("btn-error", rsx! { "Cancel" }, Cancel),
-        QueueStatus::Starting => ("btn-warning", rsx! { "Starting..." }, Cancel),
-        QueueStatus::Stopping => ("btn-warning", rsx! { "Stopping..." }, Nothing),
-        QueueStatus::Ready | QueueStatus::Paused => ("btn-success", rsx! { "Run" }, Run),
-        QueueStatus::Empty | QueueStatus::Finished => ("btn-success", rsx! { "Run" }, Nothing),
+        Running => ("btn-error", rsx! { "Cancel" }, Cancel),
+        Starting => ("btn-warning", rsx! { "Starting..." }, Cancel),
+        Stopping => ("btn-warning", rsx! { "Stopping..." }, Nothing),
+        Ready | Paused => ("btn-success", rsx! { "Run" }, Run),
+        Empty | Finished => ("btn-success", rsx! { "Run" }, Nothing),
     };
 
     rsx! {
         button {
             class: "btn btn-block {color_class} text-lg",
-            disabled: matches!(status, QueueStatus::Finished | QueueStatus::Empty),
+            disabled: matches!(status, Finished | Empty),
             onclick: move |_| {
                 let queue = STATE.read().unwrap();
                 match onclick {

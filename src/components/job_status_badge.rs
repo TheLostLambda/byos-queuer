@@ -9,9 +9,11 @@ pub(super) struct JobStatusProp(pub JobStatus);
 
 #[component]
 pub fn JobStatusBadge(status: JobStatusProp) -> Element {
+    use JobStatus::*;
+
     let (color_class, content, tooltip) = match status.0 {
-        JobStatus::Queued => ("badge-neutral", rsx! { "Queued" }, None),
-        JobStatus::Running(_, instant) => (
+        Queued => ("badge-neutral", rsx! { "Queued" }, None),
+        Running(_, instant) => (
             "badge-primary",
             rsx! {
                 "Running "
@@ -19,7 +21,7 @@ pub fn JobStatusBadge(status: JobStatusProp) -> Element {
             },
             None,
         ),
-        JobStatus::Completed(duration) => (
+        Completed(duration) => (
             "badge-success",
             rsx! {
                 "Completed "
@@ -27,7 +29,7 @@ pub fn JobStatusBadge(status: JobStatusProp) -> Element {
             },
             None,
         ),
-        JobStatus::Failed(report, duration) => (
+        Failed(report, duration) => (
             "badge-error",
             rsx! {
                 "Failed "
@@ -35,8 +37,8 @@ pub fn JobStatusBadge(status: JobStatusProp) -> Element {
             },
             Some(report.to_string()),
         ),
-        JobStatus::Resetting => ("badge-warning", rsx! { "Stopping..." }, None),
-        JobStatus::Abandoned => unreachable!(),
+        Resetting => ("badge-warning", rsx! { "Stopping..." }, None),
+        Abandoned => unreachable!(),
     };
 
     rsx! {
