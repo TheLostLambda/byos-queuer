@@ -8,24 +8,34 @@ use dioxus::prelude::*;
 
 use crate::STATE;
 
+enum OnClick {
+    Run,
+    Cancel,
+    Nothing,
+}
+
 #[component]
 pub fn RunButton(status: QueueStatus) -> Element {
-    let (color_class, content) = match status {
-        QueueStatus::Running => ("btn-error", rsx! { "Cancel" }),
-        QueueStatus::Stopping => ("btn-warning", rsx! { "Stopping..." }),
-        _ => ("btn-success", rsx! { "Run" }),
+    use OnClick::*;
+
+    let (color_class, content, onclick) = match status {
+        QueueStatus::Running => ("btn-error", rsx! { "Cancel" }, Cancel),
+        QueueStatus::Starting => ("btn-warning", rsx! { "Starting..." }, Cancel),
+        QueueStatus::Stopping => ("btn-warning", rsx! { "Stopping..." }, Nothing),
+        QueueStatus::Ready | QueueStatus::Paused => ("btn-success", rsx! { "Run" }, Run),
+        QueueStatus::Empty | QueueStatus::Finished => ("btn-success", rsx! { "Run" }, Nothing),
     };
 
     rsx! {
         button {
             class: "btn btn-block {color_class} text-lg",
-            disabled: status == QueueStatus::Finished,
+            disabled: matches!(status, QueueStatus::Finished | QueueStatus::Empty),
             onclick: move |_| {
                 let queue = STATE.read().unwrap();
-                if status == QueueStatus::Running {
-                    queue.cancel().unwrap();
-                } else {
-                    queue.run().unwrap();
+                match onclick {
+                    Run => queue.run().unwrap(),
+                    Cancel => queue.cancel().unwrap(),
+                    Nothing => {}
                 }
             },
 
