@@ -81,6 +81,10 @@ impl Queue {
 
     #[must_use]
     pub fn status(&self) -> Status {
+        // NOTE: This prevents any other thread from obtaining write-access to `self.jobs` whilst this method is
+        // running. This prevents other threads from changing `self.jobs` between the first and second half of an `&&`
+        // expression, which could otherwise lead to us reaching the `unreachable!()` branch
+        let _jobs_guard = self.jobs.read().unwrap();
         if self.running() && self.cancelled() {
             Status::Stopping
         } else if self.finished() {
