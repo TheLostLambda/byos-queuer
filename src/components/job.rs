@@ -9,7 +9,10 @@ use crate::components::{
 
 #[component]
 pub fn Job(index: usize, name: String, #[props(into)] status: JobStatusProp) -> Element {
-    let show_reset = !matches!(&status.0, JobStatus::Queued);
+    let show_reset = matches!(
+        &status.0,
+        JobStatus::Running(..) | JobStatus::Completed(..) | JobStatus::Failed(..)
+    );
 
     rsx! {
         li { class: "list-row items-center",
