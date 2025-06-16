@@ -33,10 +33,14 @@ pub enum Status {
     Empty,
     /// The `Queue` is stopped and contains only `Queued` `Job`s
     Ready,
-    /// The `Queue` is running but contains no `Running` `Job`s
+    /// The `Queue` is running but contains only `Queued` `Job`s
     Starting,
+    /// The `Queue` is running and contains some finished `Job`s but none that are `Running`
+    Restarting,
     /// The `Queue` is running and contains at least one `Running` `Job`
     Running,
+    /// The `Queue` is still running but has been cancelled and contains no finished (`Completed` / `Failed`) `Job`s
+    Cancelling,
     /// The `Queue` is still running but has been cancelled or contains only finished (`Completed` / `Failed`) `Job`s
     Stopping,
     /// The `Queue` is stopped and contains both finished (`Completed` / `Failed`) and `Queued` `Job`s
@@ -95,19 +99,25 @@ impl Queue {
         // running. This prevents other threads from changing `self.jobs` between the first and second half of an `&&`
         // expression, which could otherwise lead to us reaching the `unreachable!()` branch
         let _jobs_guard = self.jobs.read().unwrap();
-        if self.workers_running() && (self.cancelled() || self.only_finished_jobs()) {
-            Status::Stopping
-        } else if self.workers_running() && self.no_running_jobs() {
-            Status::Starting
-        } else if self.workers_running() {
-            Status::Running
+        if self.workers_running() {
+            if self.cancelled() && self.no_finished_jobs() {
+                Status::Cancelling
+            } else if self.cancelled() || self.only_finished_jobs() {
+                Status::Stopping
+            } else if self.no_running_jobs() && self.no_finished_jobs() {
+                Status::Starting
+            } else if self.no_running_jobs() {
+                Status::Restarting
+            } else {
+                Status::Running
+            }
         } else if self.no_jobs() {
             Status::Empty
         } else if self.only_finished_jobs() {
             Status::Finished
         } else if self.partially_finished_jobs() {
             Status::Paused
-        } else if self.only_queued_jobs() {
+        } else if self.no_finished_jobs() {
             Status::Ready
         } else {
             unreachable!();
@@ -355,12 +365,13 @@ impl Queue {
         false
     }
 
-    fn only_queued_jobs(&self) -> bool {
-        self.jobs
-            .read()
-            .unwrap()
-            .iter()
-            .all(|job| matches!(job.status(), JobStatus::Queued))
+    fn no_finished_jobs(&self) -> bool {
+        !self.jobs.read().unwrap().iter().any(|job| {
+            matches!(
+                job.status(),
+                JobStatus::Completed(..) | JobStatus::Failed(..)
+            )
+        })
     }
 
     pub fn queue_job(
@@ -773,7 +784,7 @@ mod tests {
         let test_code = || {
             queue.run().unwrap();
 
-            assert_eq!(queue.status(), Status::Starting);
+            assert_eq!(queue.status(), Status::Restarting);
 
             sleep_ms(10);
 
@@ -1166,7 +1177,24 @@ mod tests {
             assert_unpark_within_ms!(thread_parker, 1);
             assert_unpark_within_ms!(thread_parker, 5);
             assert_unpark_within_ms!(thread_parker, 5);
-            assert_unpark_within_ms!(thread_parker, 5);
+            assert!(thread_parker.no_missed_parks());
+
+            // `queue.cancel()` ----------------------------------------------------------------------------------------
+
+            queue.cancel().unwrap();
+
+            assert_unpark_within_ms!(thread_parker, 1);
+            assert_unpark_within_ms!(thread_parker, 1);
+            assert_unpark_within_ms!(thread_parker, 1);
+            assert_unpark_within_ms!(thread_parker, 1);
+            assert!(thread_parker.no_missed_parks());
+
+            // `queue.run()` -------------------------------------------------------------------------------------------
+
+            queue.run().unwrap();
+
+            assert_unpark_within_ms!(thread_parker, 1);
+            assert_unpark_within_ms!(thread_parker, 15);
             assert_unpark_within_ms!(thread_parker, 15);
             assert!(thread_parker.no_missed_parks());
 
@@ -1278,6 +1306,16 @@ mod tests {
                 (&[Queued, Queued, Queued], Status::Starting),
             ],
             &[(&[Queued, Queued, Queued], Status::Starting)],
+            // `queue.cancel()`
+            // NOTE: Note that something actually starts `Running` very briefly here! That `Job` was in the middle of
+            // spawning (past the point where it could have been cancelled), so `queue.cancel()` lets it finish (set
+            // its status to `Running`) before coming in to kill it.
+            &[(&[Running, Queued, Queued], Status::Running)],
+            &[(&[Stopping, Queued, Queued], Status::Cancelling)],
+            &[(&[Queued, Queued, Queued], Status::Cancelling)],
+            &[(&[Queued, Queued, Queued], Status::Ready)],
+            // `queue.run()`
+            &[(&[Queued, Queued, Queued], Status::Starting)],
             &[(&[Running, Queued, Queued], Status::Running)],
             &[(&[Running, Running, Queued], Status::Running)],
             // `queue.reset_job(0)`
@@ -1292,7 +1330,7 @@ mod tests {
             &[(&[Failed, Queued, Completed], Status::Stopping)],
             &[(&[Failed, Queued, Completed], Status::Paused)],
             // `queue.run()`
-            &[(&[Failed, Queued, Completed], Status::Starting)],
+            &[(&[Failed, Queued, Completed], Status::Restarting)],
             &[(&[Failed, Running, Completed], Status::Running)],
             &[(&[Failed, Completed, Completed], Status::Stopping)],
             &[(&[Failed, Completed, Completed], Status::Finished)],
@@ -1308,7 +1346,7 @@ mod tests {
             // `queue.remove_job(0)`
             &[(&[Queued], Status::Starting)],
             // `queue.clear()`
-            &[(&[], Status::Stopping)],
+            &[(&[], Status::Cancelling)],
             &[(&[], Status::Empty)],
         ];
 

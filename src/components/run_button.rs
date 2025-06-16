@@ -22,8 +22,8 @@ pub fn RunButton(status: QueueStatus) -> Element {
 
     let (color_class, content, onclick) = match status {
         Running => ("btn-error", rsx! { "Cancel" }, Cancel),
-        Starting => ("btn-warning", rsx! { "Starting..." }, Cancel),
-        Stopping => ("btn-warning", rsx! { "Stopping..." }, Nothing),
+        Starting | Restarting => ("btn-warning", rsx! { "Starting..." }, Cancel),
+        Cancelling | Stopping => ("btn-warning", rsx! { "Stopping..." }, Nothing),
         Ready | Paused => ("btn-success", rsx! { "Run" }, Run),
         Empty | Finished => ("btn-success", rsx! { "Run" }, Nothing),
     };
