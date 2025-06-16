@@ -8,6 +8,7 @@ use dioxus::prelude::*;
 
 use crate::STATE;
 
+#[derive(PartialEq)]
 enum OnClick {
     Run,
     Cancel,
@@ -30,7 +31,7 @@ pub fn RunButton(status: QueueStatus) -> Element {
     rsx! {
         button {
             class: "btn btn-block {color_class} text-lg",
-            disabled: matches!(status, Finished | Empty),
+            disabled: onclick == Nothing,
             onclick: move |_| {
                 let queue = STATE.read().unwrap();
                 match onclick {
