@@ -5,6 +5,8 @@ mod header;
 mod job;
 mod job_queue;
 mod job_status_badge;
+mod launch_interval;
+mod maximum_concurrent_jobs;
 mod reset_icon;
 mod reset_job;
 mod reset_queue;
