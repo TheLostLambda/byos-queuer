@@ -13,6 +13,7 @@ mod run_button;
 mod run_timer;
 mod settings_button;
 mod settings_icon;
+mod settings_modal;
 mod top_bar;
 
 pub use header::Header;
