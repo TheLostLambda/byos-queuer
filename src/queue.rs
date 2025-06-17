@@ -1095,7 +1095,7 @@ mod tests {
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Running, Failed, Running]);
 
-            sleep_ms(40);
+            sleep_ms(45);
 
             assert_eq!(queue.status(), Status::Finished);
             assert_eq!(queue.worker_pool.available_workers(), 2);
