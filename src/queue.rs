@@ -801,7 +801,7 @@ mod tests {
 
             assert_eq!(queue.status(), Status::Restarting);
 
-            sleep_ms(10);
+            sleep_ms(5);
 
             assert_eq!(queue.status(), Status::Running);
             assert_eq!(queue.worker_pool.available_workers(), 1);
