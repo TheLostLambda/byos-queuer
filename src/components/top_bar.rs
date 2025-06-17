@@ -10,21 +10,15 @@ use crate::components::{clear_queue::ClearQueue, reset_queue::ResetQueue};
 
 #[component]
 pub fn TopBar(status: QueueStatus) -> Element {
-    use QueueStatus::*;
-
-    // TODO: If I write a lot of code like this, I should move it to a `QueueStatus` method. Something like
-    // `QueueStatus.resettable()` or `QueueStatus.clearable()`.
-    let resettable = matches!(status, Running | Stopping | Paused | Restarting | Finished);
-
     rsx! {
         div { class: "flex items-center justify-between gap-4 px-4",
             h2 { class: "card-title grow", "Queued Jobs" }
 
-            if resettable {
+            if status.resettable() {
                 ResetQueue {}
             }
 
-            if status != Empty {
+            if status.clearable() {
                 ClearQueue {}
             }
         }

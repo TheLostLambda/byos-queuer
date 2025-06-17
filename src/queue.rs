@@ -284,6 +284,21 @@ impl Queue {
     }
 }
 
+impl Status {
+    #[must_use]
+    pub const fn resettable(&self) -> bool {
+        matches!(
+            self,
+            Self::Running | Self::Stopping | Self::Paused | Self::Restarting | Self::Finished
+        )
+    }
+
+    #[must_use]
+    pub const fn clearable(&self) -> bool {
+        matches!(self, Self::Empty)
+    }
+}
+
 // Private Helper Code =================================================================================================
 
 type Jobs = Arc<RwLock<Vec<Arc<Job>>>>;
