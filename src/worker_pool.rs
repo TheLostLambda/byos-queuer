@@ -192,14 +192,14 @@ pub(crate) mod tests {
         assert_eq!(worker_pool.available_workers(), 5);
         assert_eq!(active_workers, 1);
 
-        sleep_ms(2);
+        sleep_ms(3);
 
-        let active_workers = worker_pool.spawn(5, || sleep_ms(8)).unwrap();
+        let active_workers = worker_pool.spawn(5, || sleep_ms(5)).unwrap();
         assert!(worker_pool.running());
         assert_eq!(worker_pool.available_workers(), 0);
         assert_eq!(active_workers, 6);
 
-        sleep_ms(5);
+        sleep_ms(3);
 
         assert!(worker_pool.running());
         assert_eq!(worker_pool.available_workers(), 1);
@@ -211,7 +211,7 @@ pub(crate) mod tests {
             "tried to launch 2 new workers, but 5 workers were already running and the maximum number of workers is 6"
         );
 
-        sleep_ms(10);
+        sleep_ms(3);
 
         assert!(!worker_pool.running());
         assert_eq!(worker_pool.available_workers(), 6);
@@ -251,7 +251,7 @@ pub(crate) mod tests {
         assert_eq!(worker_pool.available_workers(), 0);
         assert_eq!(active_workers, 6);
 
-        assert_unpark_within_ms!(thread_parker, 15);
+        assert_unpark_within_ms!(thread_parker, 6);
         assert!(!worker_pool.running());
         assert_eq!(worker_pool.available_workers(), 6);
 
@@ -273,7 +273,7 @@ pub(crate) mod tests {
         assert_eq!(updates.lock().unwrap()[..], [true, false, true]);
 
         // Let the `WorkerPool` finish and then check `updates` again
-        assert_unpark_within_ms!(thread_parker, 10);
+        assert_unpark_within_ms!(thread_parker, 6);
 
         assert_eq!(updates.lock().unwrap()[..], [true, false, true, false]);
 

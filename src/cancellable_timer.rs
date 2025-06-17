@@ -145,7 +145,7 @@ mod tests {
 
         let guard = timer.wait().unwrap();
         let elapsed = start.elapsed();
-        assert!(Duration::from_millis(4) < elapsed && elapsed < Duration::from_millis(9));
+        assert!(Duration::from_millis(4) < elapsed && elapsed < Duration::from_millis(6));
 
         // NOTE: Dropping this is important, otherwise the next call to `wait()` deadlocks!
         drop(guard);
@@ -154,14 +154,14 @@ mod tests {
 
         // Waiting for the timer again returns instantly!
         let guard = timer.wait().unwrap();
-        assert!(start.elapsed() < Duration::from_micros(75));
+        assert!(start.elapsed() < Duration::from_micros(5));
 
         // But the timer can be reset using its `TimerGuard`
         let start = guard.reset();
 
         timer.wait().unwrap();
         let elapsed = start.elapsed();
-        assert!(Duration::from_millis(4) < elapsed && elapsed < Duration::from_millis(9));
+        assert!(Duration::from_millis(4) < elapsed && elapsed < Duration::from_millis(6));
     }
 
     #[test]
@@ -172,9 +172,8 @@ mod tests {
         thread::scope(|s| {
             let thread_handles: Vec<_> = (0..2)
                 .map(|_| {
-                    let start_of_wait = Instant::now();
-                    let timer = &timer;
-                    s.spawn(move || {
+                    s.spawn(|| {
+                        let start_of_wait = Instant::now();
                         if let Some(guard) = timer.wait() {
                             guard.reset();
                         }
@@ -190,14 +189,14 @@ mod tests {
                 .into_iter()
                 .map(|handle| handle.join().unwrap())
             {
-                assert!(Duration::from_millis(5) < elapsed && elapsed < Duration::from_millis(7));
+                assert!(Duration::from_millis(4) < elapsed && elapsed < Duration::from_millis(6));
             }
         });
 
         // Timer refuses to wait whilst it's cancelled
         let start = Instant::now();
         assert!(timer.wait().is_none());
-        assert!(start.elapsed() < Duration::from_micros(75));
+        assert!(start.elapsed() < Duration::from_micros(5));
 
         // But the timer can be resumed / uncancelled
         timer.resume();
@@ -205,7 +204,7 @@ mod tests {
 
         timer.wait().unwrap();
         let elapsed = start.elapsed();
-        assert!(Duration::from_millis(1) < elapsed && elapsed < Duration::from_millis(7));
+        assert!(Duration::from_millis(4) < elapsed && elapsed < Duration::from_millis(6));
 
         // And finally, show that timers can still finish on their own without cancelling
         timer.wait().unwrap().reset();
@@ -213,9 +212,8 @@ mod tests {
         thread::scope(|s| {
             let thread_handles: Vec<_> = (0..2)
                 .map(|_| {
-                    let start_of_wait = Instant::now();
-                    let timer = &timer;
-                    s.spawn(move || {
+                    s.spawn(|| {
+                        let start_of_wait = Instant::now();
                         if let Some(guard) = timer.wait() {
                             guard.reset();
                         }
@@ -227,20 +225,16 @@ mod tests {
             sleep_ms(15);
             timer.cancel();
 
-            let mut thread_durations: Vec<_> = thread_handles
+            let thread_durations: Vec<_> = thread_handles
                 .into_iter()
                 .map(|handle| handle.join().unwrap())
                 .collect();
 
-            // NOTE: Sort threads by duration (sometimes the second thread can lock first, so this just orders things
-            // from first-locked to last-locked instead of first-spawned to last-spawned)
-            thread_durations.sort_unstable();
-
             let elapsed = thread_durations[0];
-            assert!(Duration::from_millis(9) < elapsed && elapsed < Duration::from_millis(15));
+            assert!(Duration::from_millis(9) < elapsed && elapsed < Duration::from_millis(11));
 
             let elapsed = thread_durations[1];
-            assert!(Duration::from_millis(15) < elapsed && elapsed < Duration::from_millis(20));
+            assert!(Duration::from_millis(14) < elapsed && elapsed < Duration::from_millis(16));
         });
     }
 }
