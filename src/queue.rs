@@ -297,6 +297,14 @@ impl Status {
     pub const fn clearable(&self) -> bool {
         !matches!(self, Self::Empty)
     }
+
+    #[must_use]
+    pub const fn running(&self) -> bool {
+        !matches!(
+            self,
+            Self::Empty | Self::Ready | Self::Paused | Self::Finished
+        )
+    }
 }
 
 // Private Helper Code =================================================================================================

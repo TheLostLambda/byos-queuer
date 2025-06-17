@@ -3,18 +3,14 @@
 // `#[expect(...)]` inside of the `#[component]` macro
 #![expect(clippy::derive_partial_eq_without_eq)]
 
-use byos_queuer::queue::Status as QueueStatus;
+use crate::components::settings_icon::SettingsIcon;
 use dioxus::prelude::*;
 
-use crate::components::{run_button::RunButton, settings_button::SettingsButton};
+use byos_queuer::queue::Status as QueueStatus;
 
 #[component]
-pub fn RunBar(status: QueueStatus) -> Element {
+pub fn SettingsButton(status: QueueStatus) -> Element {
     rsx! {
-        div { class: "flex items-center justify-between gap-4 mx-2",
-
-            RunButton { status }
-            SettingsButton { status }
-        }
+        button { class: "btn btn-square", disabled: status.running(), SettingsIcon {} }
     }
 }

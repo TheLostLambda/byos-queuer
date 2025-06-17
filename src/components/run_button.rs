@@ -30,7 +30,7 @@ pub fn RunButton(status: QueueStatus) -> Element {
 
     rsx! {
         button {
-            class: "btn btn-block {color_class} text-lg",
+            class: "btn grow {color_class} text-lg",
             disabled: onclick == Nothing,
             onclick: move |_| {
                 let queue = STATE.read().unwrap();
