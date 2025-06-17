@@ -295,7 +295,7 @@ impl Status {
 
     #[must_use]
     pub const fn clearable(&self) -> bool {
-        matches!(self, Self::Empty)
+        !matches!(self, Self::Empty)
     }
 }
 
