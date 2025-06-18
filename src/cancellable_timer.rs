@@ -31,6 +31,12 @@ impl CancellableTimer {
         }
     }
 
+    #[must_use]
+    pub const fn duration(&self) -> Duration {
+        self.duration
+    }
+
+    #[must_use]
     pub fn cancelled(&self) -> bool {
         *self.cancelled.read().unwrap()
     }
