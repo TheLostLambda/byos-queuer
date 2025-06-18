@@ -94,6 +94,16 @@ impl Queue {
     // Getters ---------------------------------------------------------------------------------------------------------
 
     #[must_use]
+    pub const fn workers(&self) -> usize {
+        self.worker_pool.max_workers()
+    }
+
+    #[must_use]
+    pub fn stagger_duration(&self) -> Duration {
+        self.stagger_timer.duration()
+    }
+
+    #[must_use]
     pub fn status(&self) -> Status {
         // NOTE: This prevents any other thread from obtaining write-access to `self.jobs` whilst this method is
         // running. This prevents other threads from changing `self.jobs` between the first and second half of an `&&`
@@ -802,6 +812,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(queue.status(), Status::Paused);
+        assert_eq!(queue.workers(), 3);
+        assert_eq!(queue.stagger_duration(), Duration::from_secs(0));
 
         // Run the queue again, making sure that our changes were applied and that `Job` history is retained
         let test_code = || {
