@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::{STATE, components::reset_icon::ResetIcon};
+use crate::{QUEUE, components::reset_icon::ResetIcon};
 
 #[component]
 pub fn ResetQueue() -> Element {
@@ -8,7 +8,7 @@ pub fn ResetQueue() -> Element {
         div {
             class: "tooltip",
             "data-tip": "Reset whole queue",
-            onclick: move |_| STATE.read().unwrap().reset().unwrap(),
+            onclick: move |_| QUEUE.read().unwrap().reset().unwrap(),
 
             ResetIcon {}
         }

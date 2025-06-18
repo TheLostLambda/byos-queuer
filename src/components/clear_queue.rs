@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use crate::{STATE, components::delete_icon::DeleteIcon};
+use crate::{QUEUE, components::delete_icon::DeleteIcon};
 
 #[component]
 pub fn ClearQueue() -> Element {
@@ -8,7 +8,7 @@ pub fn ClearQueue() -> Element {
         div {
             class: "tooltip",
             "data-tip": "Clear whole queue",
-            onclick: move |_| STATE.read().unwrap().clear().unwrap(),
+            onclick: move |_| QUEUE.read().unwrap().clear().unwrap(),
 
             DeleteIcon {}
         }

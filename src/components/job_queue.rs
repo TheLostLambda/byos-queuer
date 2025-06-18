@@ -1,17 +1,17 @@
 use dioxus::prelude::*;
 
 use crate::{
-    STATE,
+    QUEUE,
     components::{RunBar, job::Job, top_bar::TopBar},
 };
 
 #[component]
 pub fn JobQueue() -> Element {
     use_hook(|| {
-        STATE.read().unwrap().set_on_update(schedule_update());
+        QUEUE.read().unwrap().set_on_update(schedule_update());
     });
 
-    let queue = STATE.read().unwrap();
+    let queue = QUEUE.read().unwrap();
     let jobs = queue.jobs();
     let status = queue.status();
     drop(queue);

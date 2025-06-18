@@ -28,7 +28,7 @@ const PROTEIN_FILE: &str = "tests/data/proteins.fasta";
 const MODIFICATIONS_FILE: Option<&str> = Some("tests/data/modifications.txt");
 const OUTPUT_DIRECTORY: &str = "/home/tll/Downloads/byos-queuer/";
 
-pub static STATE: LazyLock<RwLock<Queue>> = LazyLock::new(|| {
+pub static QUEUE: LazyLock<RwLock<Queue>> = LazyLock::new(|| {
     let _ = fs::remove_dir_all(OUTPUT_DIRECTORY);
     fs::create_dir(OUTPUT_DIRECTORY).unwrap();
 

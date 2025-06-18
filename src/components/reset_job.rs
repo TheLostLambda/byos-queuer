@@ -5,7 +5,7 @@
 
 use dioxus::prelude::*;
 
-use crate::{STATE, components::reset_icon::ResetIcon};
+use crate::{QUEUE, components::reset_icon::ResetIcon};
 
 #[component]
 pub fn ResetJob(index: usize) -> Element {
@@ -13,7 +13,7 @@ pub fn ResetJob(index: usize) -> Element {
         div {
             class: "tooltip",
             "data-tip": "Reset job",
-            onclick: move |_| STATE.read().unwrap().reset_job(index).unwrap(),
+            onclick: move |_| QUEUE.read().unwrap().reset_job(index).unwrap(),
 
             ResetIcon {}
         }

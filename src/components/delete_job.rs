@@ -5,7 +5,7 @@
 
 use dioxus::prelude::*;
 
-use crate::{STATE, components::delete_icon::DeleteIcon};
+use crate::{QUEUE, components::delete_icon::DeleteIcon};
 
 #[component]
 pub fn DeleteJob(index: usize) -> Element {
@@ -13,7 +13,7 @@ pub fn DeleteJob(index: usize) -> Element {
         div {
             class: "tooltip",
             "data-tip": "Delete job",
-            onclick: move |_| STATE.read().unwrap().remove_job(index).unwrap(),
+            onclick: move |_| QUEUE.read().unwrap().remove_job(index).unwrap(),
 
             DeleteIcon {}
         }

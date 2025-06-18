@@ -6,7 +6,7 @@
 use byos_queuer::queue::Status as QueueStatus;
 use dioxus::prelude::*;
 
-use crate::STATE;
+use crate::QUEUE;
 
 #[derive(PartialEq)]
 enum OnClick {
@@ -33,7 +33,7 @@ pub fn RunButton(status: QueueStatus) -> Element {
             class: "btn grow {color_class} text-lg",
             disabled: onclick == Nothing,
             onclick: move |_| {
-                let queue = STATE.read().unwrap();
+                let queue = QUEUE.read().unwrap();
                 match onclick {
                     Run => queue.run().unwrap(),
                     Cancel => queue.cancel().unwrap(),
