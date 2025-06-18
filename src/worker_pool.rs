@@ -38,13 +38,18 @@ impl WorkerPool {
     }
 
     #[must_use]
+    pub const fn max_workers(&self) -> usize {
+        self.max_workers
+    }
+
+    #[must_use]
     pub fn running(&self) -> bool {
         self.workers.load(Ordering::Relaxed) != 0
     }
 
     #[must_use]
     pub fn available_workers(&self) -> usize {
-        self.max_workers - self.workers.load(Ordering::Relaxed)
+        self.max_workers() - self.workers.load(Ordering::Relaxed)
     }
 
     pub fn spawn(
@@ -55,11 +60,11 @@ impl WorkerPool {
         let previous_workers = self.workers
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |mut workers| {
                 workers += new_workers;
-                (workers <= self.max_workers).then_some(workers)
+                (workers <= self.max_workers()).then_some(workers)
             })
             .map_err(|workers|
                 eyre!("tried to launch {new_workers} new workers, but {workers} workers were already running \
-                       and the maximum number of workers is {}", self.max_workers))?;
+                       and the maximum number of workers is {}", self.max_workers()))?;
 
         // NOTE: If we've gone from no workers to `self.running()`, then the `WorkerPool` has just been started and we
         // should trigger an `on_update()`
