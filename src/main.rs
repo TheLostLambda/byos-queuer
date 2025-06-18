@@ -32,7 +32,7 @@ pub static QUEUE: LazyLock<RwLock<Queue>> = LazyLock::new(|| {
     let _ = fs::remove_dir_all(OUTPUT_DIRECTORY);
     fs::create_dir(OUTPUT_DIRECTORY).unwrap();
 
-    let queue = Queue::new(2, Duration::from_millis(1500)).unwrap();
+    let queue = Queue::new(2, Duration::from_secs(1)).unwrap();
 
     for _ in 0..2 {
         queue

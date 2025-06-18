@@ -1,7 +1,12 @@
+// NOTE: The `#[component]` macro is deriving `PartialEq`, but not `Eq` (since that's not needed), and clippy is
+// complaining about that. This needs to be a module-level `#![expect(...)]` since I can't actually place an
+// `#[expect(...)]` inside of the `#[component]` macro
+#![expect(clippy::derive_partial_eq_without_eq)]
+
 use dioxus::prelude::*;
 
 #[component]
-pub fn LaunchInterval() -> Element {
+pub fn LaunchInterval(value: Signal<String>) -> Element {
     rsx! {
         div {
             label { class: "input validator w-full",
@@ -15,7 +20,13 @@ pub fn LaunchInterval() -> Element {
                         determined) number of seconds."
                     }
                 }
-                input { min: "0", r#type: "number", required: "true" }
+                input {
+                    value,
+                    oninput: move |event| value.set(event.value()),
+                    min: "0",
+                    r#type: "number",
+                    required: "true",
+                }
                 span { class: "label", "seconds" }
             }
             p { class: "hidden validator-hint", "Must be zero or some positive integer" }
