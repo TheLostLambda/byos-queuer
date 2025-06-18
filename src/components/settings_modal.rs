@@ -15,7 +15,7 @@ pub fn SettingsModal(id: &'static str) -> Element {
         dialog { class: "modal", id,
             form {
                 method: "dialog",
-                class: "modal-box flex flex-col items-stretch gap-4",
+                class: "modal-box overflow-visible flex flex-col items-stretch gap-4",
                 h3 { class: "text-lg font-bold text-center mb-1", "Queue Settings" }
 
                 MaximumConcurrentJobs {}
