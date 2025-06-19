@@ -304,8 +304,13 @@ impl Status {
     }
 
     #[must_use]
+    pub const fn empty(&self) -> bool {
+        matches!(self, Self::Empty)
+    }
+
+    #[must_use]
     pub const fn clearable(&self) -> bool {
-        !matches!(self, Self::Empty)
+        !self.empty()
     }
 
     #[must_use]
