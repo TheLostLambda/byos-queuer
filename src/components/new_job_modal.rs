@@ -3,12 +3,16 @@
 // `#[expect(...)]` inside of the `#[component]` macro
 #![expect(clippy::derive_partial_eq_without_eq)]
 
+use byos_queuer::queue::Queue;
 use dioxus::prelude::*;
 
-use crate::components::{
-    base_workflow::BaseWorkflow, group_samples::GroupSamples,
-    modifications_file::ModificationsFile, output_directory::OutputDirectory,
-    protein_file::ProteinFile, sample_files::SampleFiles,
+use crate::{
+    QUEUE,
+    components::{
+        base_workflow::BaseWorkflow, group_samples::GroupSamples,
+        modifications_file::ModificationsFile, output_directory::OutputDirectory,
+        protein_file::ProteinFile, sample_files::SampleFiles,
+    },
 };
 
 #[component]
@@ -25,9 +29,37 @@ pub fn NewJobModal(id: &'static str) -> Element {
     };
 
     let onsubmit = move |_| {
+        let queue_jobs = if grouped() {
+            Queue::queue_grouped_job
+        } else {
+            Queue::queue_jobs
+        };
+
+        // SAFETY: Submission should only be possible if all of the required values are `Some(...)`, so these unwraps
+        // should never panic
+        queue_jobs(
+            &QUEUE.read().unwrap(),
+            &base_workflow().unwrap(),
+            &sample_files(),
+            &protein_file().unwrap(),
+            modifications_file().as_ref(),
+            &output_directory().unwrap(),
+            // FIXME: I do need to deal with this `.unwrap()` though!
+        )
+        .unwrap();
         close_modal();
     };
 
+    // NOTE: This is something of a hack, since ideally the required file inputs would just be marked `required`, and
+    // the form would only allow submission when those requirements are met, but `<input type="file">` is deeply broken
+    // in Dioxus at the moment and doesn't seem to acknowledge when files have been uploaded (so validation always
+    // fails, even if you've uploaded something)
+    let disabled = use_memo(move || {
+        base_workflow().is_none()
+            || sample_files().is_empty()
+            || protein_file().is_none()
+            || output_directory().is_none()
+    });
     rsx! {
         dialog { class: "modal", id,
             form {
@@ -52,7 +84,12 @@ pub fn NewJobModal(id: &'static str) -> Element {
                         onclick: move |_| close_modal(),
                         "Cancel"
                     }
-                    button { class: "btn grow btn-primary", r#type: "submit", "Queue" }
+                    button {
+                        class: "btn grow btn-primary",
+                        r#type: "submit",
+                        disabled,
+                        "Queue"
+                    }
                 }
             }
         }

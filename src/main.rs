@@ -2,7 +2,7 @@ mod components;
 mod state;
 
 use std::{
-    env, fs, path,
+    env, path,
     sync::{LazyLock, RwLock},
     time::Duration,
 };
@@ -21,43 +21,11 @@ const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 
 const INDEX_HTML: &str = include_str!("../index.html");
 
-// FIXME: Get rid of all of this once it's not longer needed for testing!
-const BASE_WORKFLOW: &str = "tests/data/PG Monomers.wflw";
-const SAMPLE_FILES: [&str; 2] = ["tests/data/WT.raw", "tests/data/6ldt.raw"];
-const PROTEIN_FILE: &str = "tests/data/proteins.fasta";
-const MODIFICATIONS_FILE: Option<&str> = Some("tests/data/modifications.txt");
-const OUTPUT_DIRECTORY: &str = "/home/tll/Downloads/byos-queuer/";
+const DEFAULT_WORKERS: usize = 6;
+const DEFAULT_STAGGER_DURATION: Duration = Duration::from_secs(3);
 
-pub static QUEUE: LazyLock<RwLock<Queue>> = LazyLock::new(|| {
-    let _ = fs::remove_dir_all(OUTPUT_DIRECTORY);
-    fs::create_dir(OUTPUT_DIRECTORY).unwrap();
-
-    let queue = Queue::new(2, Duration::from_secs(1)).unwrap();
-
-    for _ in 0..2 {
-        queue
-            .queue_jobs(
-                BASE_WORKFLOW,
-                SAMPLE_FILES,
-                PROTEIN_FILE,
-                MODIFICATIONS_FILE,
-                OUTPUT_DIRECTORY,
-            )
-            .unwrap();
-
-        queue
-            .queue_grouped_job(
-                BASE_WORKFLOW,
-                SAMPLE_FILES,
-                PROTEIN_FILE,
-                MODIFICATIONS_FILE,
-                OUTPUT_DIRECTORY,
-            )
-            .unwrap();
-    }
-
-    RwLock::new(queue)
-});
+pub static QUEUE: LazyLock<RwLock<Queue>> =
+    LazyLock::new(|| RwLock::new(Queue::new(DEFAULT_WORKERS, DEFAULT_STAGGER_DURATION).unwrap()));
 
 #[component]
 fn App() -> Element {
