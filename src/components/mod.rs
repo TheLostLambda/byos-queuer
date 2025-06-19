@@ -14,6 +14,7 @@ mod maximum_concurrent_jobs;
 mod new_icon;
 mod new_job_button;
 mod new_job_modal;
+mod protein_file;
 mod reset_icon;
 mod reset_job;
 mod reset_queue;
