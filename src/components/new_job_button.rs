@@ -9,7 +9,7 @@ use dioxus::prelude::*;
 use crate::components::new_icon::NewIcon;
 
 #[component]
-pub fn NewJob(status: QueueStatus) -> Element {
+pub fn NewJobButton(status: QueueStatus) -> Element {
     let (height_class, content) = if status.empty() {
         (
             "h-32",

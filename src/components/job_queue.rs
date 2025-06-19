@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     QUEUE,
-    components::{RunBar, job::Job, new_job::NewJob, top_bar::TopBar},
+    components::{RunBar, job::Job, new_job_button::NewJobButton, top_bar::TopBar},
 };
 
 #[component]
@@ -27,7 +27,7 @@ pub fn JobQueue() -> Element {
                     Job { index, name, status }
                 }
 
-                NewJob { status }
+                NewJobButton { status }
             }
             RunBar { status }
         }
