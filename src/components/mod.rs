@@ -20,6 +20,7 @@ mod reset_queue;
 mod run_bar;
 mod run_button;
 mod run_timer;
+mod sample_files;
 mod settings_button;
 mod settings_icon;
 mod settings_modal;

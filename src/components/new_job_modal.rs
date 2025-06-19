@@ -5,15 +5,17 @@
 
 use dioxus::prelude::*;
 
-use crate::components::{base_workflow::BaseWorkflow, group_samples::GroupSamples};
+use crate::components::{
+    base_workflow::BaseWorkflow, group_samples::GroupSamples, sample_files::SampleFiles,
+};
 
 #[component]
 pub fn NewJobModal(id: &'static str) -> Element {
-    let _sample_files = use_signal(|| ());
     let _protein_file = use_signal(|| ());
     let _modifications_file = use_signal(|| ());
     let _output_directory = use_signal(|| ());
     let base_workflow = use_signal(|| None);
+    let sample_files = use_signal(Vec::new);
     let grouped = use_signal(|| false);
 
     let close_modal = move || {
@@ -34,6 +36,7 @@ pub fn NewJobModal(id: &'static str) -> Element {
                 h3 { class: "text-lg font-bold text-center mb-1", "Queue Job(s)" }
 
                 BaseWorkflow { value: base_workflow }
+                SampleFiles { value: sample_files }
                 GroupSamples { value: grouped }
 
                 div { class: "modal-action mt-2",
