@@ -7,6 +7,8 @@ use dioxus::prelude::*;
 
 #[component]
 pub fn LaunchInterval(value: Signal<String>) -> Element {
+    let singular = use_memo(move || value().parse() == Ok(1));
+
     rsx! {
         div {
             label { class: "input validator w-full",
@@ -27,7 +29,13 @@ pub fn LaunchInterval(value: Signal<String>) -> Element {
                     r#type: "number",
                     required: "true",
                 }
-                span { class: "label", "seconds" }
+                span { class: "label",
+                    if singular() {
+                        "second"
+                    } else {
+                        "seconds"
+                    }
+                }
             }
             p { class: "hidden validator-hint", "Must be zero or some positive integer" }
         }
