@@ -41,7 +41,7 @@ pub fn RunButton(status: QueueStatus) -> Element {
                 }
             },
 
-            {content}
+            span { class: "pl-14", {content} }
         }
     }
 }
