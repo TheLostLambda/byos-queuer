@@ -27,6 +27,8 @@ pub fn SettingsModal(id: &'static str) -> Element {
     let mut stagger_duration = use_signal(read_stagger_duration);
 
     let mut close_modal = move || {
+        // TODO: Even though we close the modal first (before resetting the `workers` and `stagger_duration` signals),
+        // the UI flickers up the reset values as it's closing — is there a way to avoid that flickering?
         document::eval(&format!("{id}.close()"));
 
         // NOTE: When we close the dialog, re-sync the input states with the actual values from `QUEUE`. This ensures
