@@ -15,6 +15,7 @@ mod modifications_file;
 mod new_icon;
 mod new_job_button;
 mod new_job_modal;
+mod output_directory;
 mod protein_file;
 mod reset_icon;
 mod reset_job;
