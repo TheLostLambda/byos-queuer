@@ -9,16 +9,16 @@ use crate::components::file_path_picker::FilePathPicker;
 
 #[component]
 pub fn OutputDirectory(value: Signal<Option<String>>) -> Element {
-    let files = use_signal(Vec::new);
+    let paths = use_signal(Vec::new);
     use_effect(move || {
-        value.set(files().first().cloned());
+        value.set(paths().first().cloned());
     });
 
     rsx! {
         FilePathPicker {
             label: "Output Directory",
             tooltip: "***TODO***",
-            value: files,
+            value: paths,
             directory: true,
         }
     }
