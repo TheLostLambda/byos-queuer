@@ -11,7 +11,7 @@ use crate::components::{run_button::RunButton, settings_button::SettingsButton};
 #[component]
 pub fn RunBar(status: QueueStatus) -> Element {
     rsx! {
-        div { class: "flex items-center justify-between gap-4 mx-2",
+        div { class: "flex items-center justify-between gap-4 mx-4",
 
             RunButton { status }
             SettingsButton { status }

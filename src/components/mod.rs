@@ -8,6 +8,7 @@ mod job_status_badge;
 mod launch_interval;
 mod maximum_concurrent_jobs;
 mod new_icon;
+mod new_job;
 mod reset_icon;
 mod reset_job;
 mod reset_queue;

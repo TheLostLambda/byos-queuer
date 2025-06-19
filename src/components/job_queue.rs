@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::{
     QUEUE,
-    components::{RunBar, job::Job, top_bar::TopBar},
+    components::{RunBar, job::Job, new_job::NewJob, top_bar::TopBar},
 };
 
 #[component]
@@ -24,6 +24,8 @@ pub fn JobQueue() -> Element {
                 for (index , (name , status)) in jobs.into_iter().enumerate() {
                     Job { index, name, status }
                 }
+
+                NewJob {}
             }
             RunBar { status }
         }
