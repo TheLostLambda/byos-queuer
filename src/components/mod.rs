@@ -1,6 +1,7 @@
 mod clear_queue;
 mod delete_icon;
 mod delete_job;
+mod group_samples;
 mod header;
 mod job;
 mod job_queue;

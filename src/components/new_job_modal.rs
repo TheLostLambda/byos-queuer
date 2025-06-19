@@ -5,6 +5,8 @@
 
 use dioxus::prelude::*;
 
+use crate::components::group_samples::GroupSamples;
+
 #[component]
 pub fn NewJobModal(id: &'static str) -> Element {
     let _base_workflow = use_signal(|| ());
@@ -12,7 +14,7 @@ pub fn NewJobModal(id: &'static str) -> Element {
     let _protein_file = use_signal(|| ());
     let _modifications_file = use_signal(|| ());
     let _output_directory = use_signal(|| ());
-    let _grouped = use_signal(|| false);
+    let grouped = use_signal(|| false);
 
     let close_modal = move || {
         document::eval(&format!("{id}.close()"));
@@ -30,6 +32,8 @@ pub fn NewJobModal(id: &'static str) -> Element {
                 onsubmit,
 
                 h3 { class: "text-lg font-bold text-center mb-1", "Queue Job(s)" }
+
+                GroupSamples { value: grouped }
 
                 div { class: "modal-action mt-2",
                     button {
