@@ -11,6 +11,7 @@ mod job_queue;
 mod job_status_badge;
 mod launch_interval;
 mod maximum_concurrent_jobs;
+mod modifications_file;
 mod new_icon;
 mod new_job_button;
 mod new_job_modal;
