@@ -9,7 +9,7 @@ use dioxus::prelude::*;
 pub fn MaximumConcurrentJobs(value: Signal<String>) -> Element {
     rsx! {
         div {
-            label { class: "input validator w-full",
+            label { class: "input w-full",
                 span { class: "label tooltip",
                     "Maximum Concurrent Jobs"
 
@@ -27,7 +27,6 @@ pub fn MaximumConcurrentJobs(value: Signal<String>) -> Element {
                     required: "true",
                 }
             }
-            p { class: "hidden validator-hint", "Must be a positive integer" }
         }
     }
 }

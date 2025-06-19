@@ -11,7 +11,7 @@ pub fn LaunchInterval(value: Signal<String>) -> Element {
 
     rsx! {
         div {
-            label { class: "input validator w-full",
+            label { class: "input w-full",
                 span { class: "label tooltip",
                     "Launch Interval"
 
@@ -37,7 +37,6 @@ pub fn LaunchInterval(value: Signal<String>) -> Element {
                     }
                 }
             }
-            p { class: "hidden validator-hint", "Must be zero or some positive integer" }
         }
     }
 }
