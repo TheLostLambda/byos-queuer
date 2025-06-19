@@ -6,10 +6,12 @@
 use byos_queuer::queue::Status as QueueStatus;
 use dioxus::prelude::*;
 
-use crate::components::new_icon::NewIcon;
+use crate::components::{new_icon::NewIcon, new_job_modal::NewJobModal};
 
 #[component]
 pub fn NewJobButton(status: QueueStatus) -> Element {
+    const MODAL_ID: &str = "new_job_modal";
+
     let (height_class, content) = if status.empty() {
         (
             "h-32",
@@ -29,7 +31,14 @@ pub fn NewJobButton(status: QueueStatus) -> Element {
 
     rsx! {
         li { class: "list-row",
-            button { class: "list-col-grow btn btn-block gap-4 {height_class}", {content} }
+            button {
+                class: "list-col-grow btn btn-block gap-4 {height_class}",
+                onclick: |_| {
+                    document::eval(&format!("{MODAL_ID}.showModal()"));
+                },
+                {content}
+            }
+            NewJobModal { id: MODAL_ID }
         }
     }
 }
