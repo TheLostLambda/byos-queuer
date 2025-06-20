@@ -33,9 +33,10 @@ fn App() -> Element {
         document::Link { rel: "icon", href: FAVICON }
         document::Stylesheet { href: TAILWIND_CSS }
 
-        Header {}
-
-        main { class: "card w-full bg-base-100 shadow-sm", JobQueue {} }
+        main { class: "flex flex-col items-center w-full min-w-137",
+            Header {}
+            div { class: "card w-256 max-w-full bg-base-100 shadow-sm", JobQueue {} }
+        }
     }
 }
 
