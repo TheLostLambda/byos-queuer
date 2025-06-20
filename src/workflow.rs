@@ -11,11 +11,11 @@ use color_eyre::{
     Result,
     eyre::{Context, eyre},
 };
-use duct::{Handle, cmd};
+use duct::cmd;
 use serde_json::Value;
 
 // Local Crate Imports
-use crate::{modifications::Modifications, proteins::Proteins, samples::Samples};
+use crate::{handle::Handle, modifications::Modifications, proteins::Proteins, samples::Samples};
 
 // Public API ==========================================================================================================
 
@@ -30,6 +30,7 @@ impl Workflow {
         sample_files: impl IntoIterator<Item = impl AsRef<Path>> + Copy,
         protein_file: impl AsRef<Path> + Copy,
         modifications_file: Option<impl AsRef<Path> + Copy>,
+        working_directory: Option<impl AsRef<Path> + Copy>,
         output_directory: impl AsRef<Path> + Copy,
     ) -> Result<Self> {
         let name = Self::workflow_name(
@@ -53,7 +54,8 @@ impl Workflow {
             modifications,
         )?;
 
-        let launch_command = Self::build_command(output_directory, &name, workflow_json)?;
+        let launch_command =
+            Self::build_command(working_directory, output_directory, &name, workflow_json)?;
 
         Ok(Self {
             name,
@@ -174,24 +176,35 @@ impl Workflow {
     }
 
     fn build_command(
+        working_directory: Option<impl AsRef<Path> + Copy>,
         output_directory: impl AsRef<Path> + Copy,
         name: &str,
         workflow_json: Value,
     ) -> Result<Box<dyn Fn() -> Result<Handle> + Send + Sync>> {
-        let wflw_path = Self::wflw_path(output_directory, name);
-        let result_path = path::absolute(output_directory.as_ref().join(name))?;
+        let running_directory = working_directory
+            .as_ref()
+            .map_or(output_directory.as_ref(), AsRef::as_ref);
+        let wflw_path = Self::wflw_path(running_directory, name);
+        let result_path = path::absolute(running_directory.join(name))?;
         let result_file = result_path.join("Result");
         let log_file = result_path.join("log.txt");
 
         let name = name.to_owned();
+        let had_separate_working_directory = working_directory.is_some();
+        let output_directory = output_directory.as_ref().to_owned();
+
         let launch_command = move || {
-            Self::write_wflw(&wflw_path, &workflow_json)?;
+            let pre_start = || -> Result<()> {
+                Self::write_wflw(&wflw_path, &workflow_json)?;
 
-            if !result_path.exists() {
-                fs::create_dir(&result_path)?;
-            }
+                if !result_path.exists() {
+                    fs::create_dir(&result_path)?;
+                }
 
-            cmd!(
+                Ok(())
+            };
+
+            let cmd = cmd!(
                 Self::BYOS_EXE,
                 "--mode=create-project",
                 "--input",
@@ -200,9 +213,57 @@ impl Workflow {
                 &result_file
             )
             .stderr_to_stdout()
-            .stdout_path(&log_file)
-            .start()
-            .wrap_err_with(|| format!("failed to run workflow {name}"))
+            .stdout_path(&log_file);
+
+            let cleanup_outputs = move |wflw_path: &Path, result_path: &Path| {
+                fs::remove_file(wflw_path)?;
+                fs::remove_dir_all(result_path)?;
+                Ok(())
+            };
+
+            let post_kill = {
+                let wflw_path = wflw_path.clone();
+                let result_path = result_path.clone();
+                move || cleanup_outputs(&wflw_path, &result_path)
+            };
+
+            let post_wait = if had_separate_working_directory {
+                let working_wflw_path = wflw_path.clone();
+                let working_result_path = result_path.clone();
+                // SAFETY: My code has full control over the `wflw_` and `result_` paths, so I can guarantee that
+                // `.file_name()` will always return `Some(...)` and `.unwrap()` will never panic
+                let output_wflw_path =
+                    output_directory.join(working_wflw_path.file_name().unwrap());
+                let output_result_path =
+                    output_directory.join(working_result_path.file_name().unwrap());
+                Some(move || {
+                    fs::copy(&working_wflw_path, &output_wflw_path)?;
+                    dircpy::CopyBuilder::new(&working_result_path, &output_result_path)
+                        .overwrite(true)
+                        .run_par()?;
+
+                    cleanup_outputs(&working_wflw_path, &working_result_path)
+                })
+            } else {
+                None
+            };
+
+            // ---------------------------------------------------------------------------------------------------------
+
+            pre_start()?;
+
+            let mut handle: Handle = cmd
+                .start()
+                .wrap_err_with(|| format!("failed to run workflow {name}"))?
+                .into();
+
+            handle.set_post_kill(post_kill);
+
+            if let Some(post_wait) = post_wait {
+                handle.set_post_wait(post_wait);
+            }
+
+            Ok(handle)
         };
 
         Ok(Box::new(launch_command))
@@ -293,28 +354,27 @@ pub mod tests {
     }
 
     #[test]
-    fn new_then_run() {
+    fn start() {
         let temporary_directory = tempdir().unwrap();
         let wflw_file = wflw_file_in(&temporary_directory);
         let result_directory = result_directory_in(&temporary_directory);
         let log_file = log_file_in(&temporary_directory);
         let result_file = result_file_in(&temporary_directory);
 
-        // Test that .wflw file is created and matches reference output
-        assert!(!wflw_file.exists());
-
+        // Create new workflow and check that it has the correct name
         let workflow = Workflow::new(
             BASE_WORKFLOW,
             SAMPLE_FILES,
             PROTEIN_FASTA_FILE,
             Some(MODIFICATIONS_FILE),
+            None::<&str>,
             &temporary_directory,
         )
         .unwrap();
 
-        // Test that the returned `Workflow` has the correct `name` and `launch_command`
         assert_eq!(workflow.name(), WORKFLOW_NAME);
 
+        // Test that .wflw file is created after calling `.start()` and that it matches the reference file
         assert!(!wflw_file.exists());
         assert!(!result_directory.exists());
 
@@ -326,6 +386,7 @@ pub mod tests {
 
         assert_eq!(workflow_json, reference_workflow_json);
 
+        // Wait for the workflow to finish running, then check its log output
         let output = handle.wait();
         assert!(output.is_ok());
 
@@ -343,7 +404,89 @@ pub mod tests {
         assert!(result_file_path.is_absolute());
         assert!(result_file_path.ends_with(result_file));
 
-        // Make sure that `Workflow`s can be re-run without panicking
+        // Make sure that the workflow can be re-run without panicking
+        let handle = unsafe { with_test_path(TEST_PATH, || workflow.start()) }.unwrap();
+        let output = handle.wait();
+        assert!(output.is_ok());
+    }
+
+    #[test]
+    // NOTE: It's a test, so I think this is alright for now
+    #[expect(clippy::cognitive_complexity)]
+    fn start_with_working_directory() {
+        let working_directory = tempdir().unwrap();
+        let working_wflw_file = wflw_file_in(&working_directory);
+        let working_result_directory = result_directory_in(&working_directory);
+        let result_file = result_file_in(&working_directory);
+
+        let output_directory = tempdir().unwrap();
+        let output_wflw_file = wflw_file_in(&output_directory);
+        let output_result_directory = result_directory_in(&output_directory);
+        let log_file = log_file_in(&output_directory);
+
+        // Create new workflow and check that it has the correct name
+        let workflow = Workflow::new(
+            BASE_WORKFLOW,
+            SAMPLE_FILES,
+            PROTEIN_FASTA_FILE,
+            Some(MODIFICATIONS_FILE),
+            Some(&working_directory),
+            &output_directory,
+        )
+        .unwrap();
+
+        assert_eq!(workflow.name(), WORKFLOW_NAME);
+
+        // Test that .wflw file is created after calling `.start()` and that it matches the reference file
+        assert!(!working_wflw_file.exists());
+        assert!(!working_result_directory.exists());
+        assert!(!output_wflw_file.exists());
+        assert!(!output_result_directory.exists());
+
+        let handle = unsafe { with_test_path(TEST_PATH, || workflow.start()) }.unwrap();
+        assert!(working_wflw_file.exists());
+        assert!(working_result_directory.exists());
+        assert!(!output_wflw_file.exists());
+        assert!(!output_result_directory.exists());
+
+        let workflow_json = load_wflw_json(&working_wflw_file);
+        let reference_workflow_json = load_wflw_json(REFERENCE_WFLW_FILE);
+
+        assert_eq!(workflow_json, reference_workflow_json);
+
+        // Then kill the workflow — ensuring that files are cleaned up!
+        handle.kill().unwrap();
+        let output = handle.wait();
+        assert!(output.is_err());
+        assert!(!working_wflw_file.exists());
+        assert!(!working_result_directory.exists());
+        assert!(!output_wflw_file.exists());
+        assert!(!output_result_directory.exists());
+
+        // Then restart the workflow, let it finish running, and check its log output
+        let handle = unsafe { with_test_path(TEST_PATH, || workflow.start()) }.unwrap();
+        let output = handle.wait();
+        assert!(output.is_ok());
+        assert!(!working_wflw_file.exists());
+        assert!(!working_result_directory.exists());
+        assert!(output_wflw_file.exists());
+        assert!(output_result_directory.exists());
+
+        let merged_output = fs::read_to_string(log_file).unwrap();
+        let mut lines = merged_output.lines();
+
+        let executable_path = Path::new(lines.next().unwrap());
+        assert!(executable_path.is_absolute());
+        assert!(executable_path.ends_with(Workflow::BYOS_EXE));
+        assert_eq!(lines.next(), Some("--mode=create-project"));
+        assert_eq!(lines.next(), Some("--input"));
+        assert_eq!(lines.next(), Some(working_wflw_file.to_str().unwrap()));
+        assert_eq!(lines.next(), Some("--output"));
+        let result_file_path = Path::new(lines.next().unwrap());
+        assert!(result_file_path.is_absolute());
+        assert!(result_file_path.ends_with(result_file));
+
+        // Make sure that the workflow can be re-run without panicking
         let handle = unsafe { with_test_path(TEST_PATH, || workflow.start()) }.unwrap();
         let output = handle.wait();
         assert!(output.is_ok());

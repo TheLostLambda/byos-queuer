@@ -9,14 +9,13 @@ use color_eyre::{
     Result,
     eyre::{Report, eyre},
 };
-use duct::Handle;
 
 // Local Crate Imports
-use crate::{on_update::OnUpdate, workflow::Workflow};
+use crate::{handle::Handle, on_update::OnUpdate, workflow::Workflow};
 
 // Public API ==========================================================================================================
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub enum Status {
     #[default]
     Queued,
@@ -114,7 +113,7 @@ impl Job {
         if let Status::Running(handle, instant) = self.status() {
             let exit_status = match handle.wait() {
                 Ok(_) => Status::Completed(instant.elapsed()),
-                Err(error) => Status::Failed(Arc::new(error.into()), instant.elapsed()),
+                Err(error) => Status::Failed(Arc::new(error), instant.elapsed()),
             };
 
             // NOTE: We're rechecking the status in case another thread has changed it whilst we've been `.wait()`ing
@@ -209,6 +208,7 @@ pub mod tests {
             SAMPLE_FILES,
             PROTEIN_FASTA_FILE,
             Some(MODIFICATIONS_FILE),
+            None::<&str>,
             &temporary_directory,
         )
         .unwrap();
@@ -273,6 +273,7 @@ pub mod tests {
             SAMPLE_FILES,
             PROTEIN_FASTA_FILE,
             Some(MODIFICATIONS_FILE),
+            None::<&str>,
             &temporary_directory,
         )
         .unwrap();

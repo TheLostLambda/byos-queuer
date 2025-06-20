@@ -152,6 +152,7 @@ impl Queue {
         sample_files: impl IntoIterator<Item = impl AsRef<Path>> + Copy,
         protein_file: impl AsRef<Path> + Copy,
         modifications_file: Option<impl AsRef<Path> + Copy>,
+        working_directory: Option<impl AsRef<Path> + Copy>,
         output_directory: impl AsRef<Path> + Copy,
     ) -> Result<()> {
         for sample_file in sample_files {
@@ -160,6 +161,7 @@ impl Queue {
                 &[sample_file],
                 protein_file,
                 modifications_file,
+                working_directory,
                 output_directory,
             )?;
         }
@@ -175,6 +177,7 @@ impl Queue {
         sample_files: impl IntoIterator<Item = impl AsRef<Path>> + Copy,
         protein_file: impl AsRef<Path> + Copy,
         modifications_file: Option<impl AsRef<Path> + Copy>,
+        working_directory: Option<impl AsRef<Path> + Copy>,
         output_directory: impl AsRef<Path> + Copy,
     ) -> Result<()> {
         self.queue_job(
@@ -182,6 +185,7 @@ impl Queue {
             sample_files,
             protein_file,
             modifications_file,
+            working_directory,
             output_directory,
         )?;
 
@@ -418,6 +422,7 @@ impl Queue {
         sample_files: impl IntoIterator<Item = impl AsRef<Path>> + Copy,
         protein_file: impl AsRef<Path> + Copy,
         modifications_file: Option<impl AsRef<Path> + Copy>,
+        working_directory: Option<impl AsRef<Path> + Copy>,
         output_directory: impl AsRef<Path> + Copy,
     ) -> Result<()> {
         let workflow = Workflow::new(
@@ -425,6 +430,7 @@ impl Queue {
             sample_files,
             protein_file,
             modifications_file,
+            working_directory,
             output_directory,
         )?;
 
@@ -543,6 +549,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
+                None::<&str>,
                 &temporary_directory,
             )
             .unwrap();
@@ -569,6 +576,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
+                None::<&str>,
                 &temporary_directory,
             )
             .unwrap();
@@ -595,6 +603,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
+                None::<&str>,
                 &temporary_directory,
             )
             .unwrap();
@@ -605,6 +614,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
+                None::<&str>,
                 &temporary_directory,
             )
             .unwrap();
@@ -667,6 +677,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
+                None::<&str>,
                 &temporary_directory,
             )
             .unwrap();
@@ -693,6 +704,7 @@ mod tests {
                     SAMPLE_FILES,
                     PROTEIN_FASTA_FILE,
                     Some(MODIFICATIONS_FILE),
+                    None::<&str>,
                     &temporary_directory,
                 )
                 .unwrap();
@@ -741,6 +753,7 @@ mod tests {
                     SAMPLE_FILES,
                     PROTEIN_FASTA_FILE,
                     Some(MODIFICATIONS_FILE),
+                    None::<&str>,
                     &temporary_directory,
                 )
                 .unwrap();
@@ -805,6 +818,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
+                None::<&str>,
                 &temporary_directory,
             )
             .unwrap();
@@ -888,6 +902,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
+                None::<&str>,
                 &temporary_directory,
             )
             .unwrap();
@@ -898,6 +913,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
+                None::<&str>,
                 &temporary_directory,
             )
             .unwrap();
@@ -954,6 +970,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
+                None::<&str>,
                 &temporary_directory,
             )
             .unwrap();
@@ -964,6 +981,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
+                None::<&str>,
                 &temporary_directory,
             )
             .unwrap();
@@ -1041,6 +1059,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
+                None::<&str>,
                 &temporary_directory,
             )
             .unwrap();
@@ -1051,6 +1070,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
+                None::<&str>,
                 &temporary_directory,
             )
             .unwrap();
@@ -1168,6 +1188,7 @@ mod tests {
                 SAMPLE_FILES,
                 PROTEIN_FASTA_FILE,
                 Some(MODIFICATIONS_FILE),
+                None::<&str>,
                 &temporary_directory,
             )
             .unwrap();
@@ -1185,6 +1206,7 @@ mod tests {
                     SAMPLE_FILES,
                     PROTEIN_FASTA_FILE,
                     Some(MODIFICATIONS_FILE),
+                    None::<&str>,
                     &temporary_directory,
                 )
                 .unwrap();
@@ -1284,6 +1306,7 @@ mod tests {
                     SAMPLE_FILES,
                     PROTEIN_FASTA_FILE,
                     Some(MODIFICATIONS_FILE),
+                    None::<&str>,
                     &temporary_directory,
                 )
                 .unwrap();

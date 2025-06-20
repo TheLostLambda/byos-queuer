@@ -45,6 +45,8 @@ pub fn NewJobModal(id: &'static str) -> Element {
             &sample_files(),
             &protein_file().unwrap(),
             modifications_file().as_ref(),
+            // FIXME: Replace this with a real value from the UI!
+            None::<&str>,
             &output_directory().unwrap(),
         );
 
