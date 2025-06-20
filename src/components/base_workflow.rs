@@ -17,7 +17,8 @@ pub fn BaseWorkflow(value: Signal<Option<String>>) -> Element {
     rsx! {
         FilePathPicker {
             label: "Base Workflow",
-            tooltip: "***TODO***",
+            tooltip: "The .wflw file that the sample, protein, and modification files are merged into. All Byos \
+                      configuration aside from those three pieces is inherited from this workflow",
             value: paths,
             accept: ".wflw",
         }
