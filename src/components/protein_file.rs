@@ -17,7 +17,8 @@ pub fn ProteinFile(value: Signal<Option<String>>) -> Element {
     rsx! {
         FilePathPicker {
             label: "Protein File",
-            tooltip: "***TODO***",
+            tooltip: "Either a .fasta file containing any number of named protein sequences, or a .txt file containing \
+                      any number of unnamed peptides (one per line)",
             value: paths,
             accept: ".fasta,.txt",
         }
