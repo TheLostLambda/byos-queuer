@@ -62,11 +62,11 @@ pub fn SettingsModal(id: &'static str) -> Element {
 
                 div { class: "grid grid-cols-[min-content_1fr_min-content] gap-y-4",
                     MaximumConcurrentJobs {
-                        value: workers,
+                        value: workers(),
                         oninput: move |value| workers.set(value),
                     }
                     LaunchInterval {
-                        value: stagger_duration,
+                        value: stagger_duration(),
                         oninput: move |value| stagger_duration.set(value),
                     }
                 }

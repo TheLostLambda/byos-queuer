@@ -1,17 +1,12 @@
 use dioxus::prelude::*;
 
+use crate::components::optionally_valid_input::OptionallyValidInput;
+
 #[component]
 pub fn MaximumConcurrentJobs(
-    value: ReadOnlySignal<Option<usize>>,
+    value: Option<usize>,
     oninput: EventHandler<Option<usize>>,
 ) -> Element {
-    let mut raw_input = use_signal(String::new);
-    use_effect(move || {
-        if let Some(value) = value() {
-            raw_input.set(value.to_string());
-        }
-    });
-
     rsx! {
         label { class: "col-span-3 grid grid-cols-subgrid input w-full",
             span { class: "label tooltip",
@@ -23,13 +18,10 @@ pub fn MaximumConcurrentJobs(
                         complete, and — if this parameter is set too high — the computer could run out of memory."
                 }
             }
-            input {
+            OptionallyValidInput {
                 class: "col-span-2",
-                value: raw_input,
-                oninput: move |event| {
-                    raw_input.set(event.value());
-                    oninput.call(raw_input().parse().ok());
-                },
+                value,
+                oninput,
                 min: "1",
                 r#type: "number",
                 required: "true",
