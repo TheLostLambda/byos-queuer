@@ -1,21 +1,7 @@
 [application]
+name = "Byos Queuer"
 
-[web.app]
-
-# HTML title tag content
-title = "Byos Queuer"
-
-# include `assets` in web platform
-[web.resource]
-
-# Additional CSS style files
-style = []
-
-# Additional JavaScript files
-script = []
-
-[web.resource.dev]
-
-# Javascript code file
-# serve: [dev-server] only
-script = []
+[bundle]
+identifier = "ac.uk.mesnage-lab"
+publisher = "Mesnage Lab"
+icon = ["assets/favicon.ico"]

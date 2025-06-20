@@ -1,3 +1,6 @@
+// NOTE: This hides the terminal that pops up on Windows when the application is run
+#![windows_subsystem = "windows"]
+
 mod components;
 
 use std::{
