@@ -20,7 +20,7 @@ tailwatch:
     deno run -A npm:@tailwindcss/cli -i ./input.css -o ./assets/tailwind.css --watch
 
 serve:
-    dx serve
+    PATH="tests/scripts/queue-ui":$PATH dx serve
 
 xwin:
     cargo xwin build --target x86_64-pc-windows-msvc --release

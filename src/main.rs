@@ -4,7 +4,6 @@
 mod components;
 
 use std::{
-    env, path,
     sync::{LazyLock, RwLock},
     time::Duration,
 };
@@ -43,19 +42,6 @@ fn App() -> Element {
 }
 
 fn main() -> Result<()> {
-    // FIXME: Kill this block!
-
-    const TEST_PATH: &str = "tests/scripts/queue-ui";
-    let old_path = env::var("PATH").unwrap_or_default();
-    let new_path = path::absolute(TEST_PATH).unwrap();
-    let joined_path = format!("{new_path}:{old_path}", new_path = new_path.display());
-
-    unsafe {
-        env::set_var("PATH", joined_path);
-    }
-
-    // FIXME: End of block to kill
-
     color_eyre::install()?;
 
     dioxus::LaunchBuilder::new()
