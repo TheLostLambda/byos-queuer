@@ -4,6 +4,7 @@ use std::{
     fs::{self, File},
     io::Seek,
     path::{self, Path, PathBuf},
+    process::Output,
 };
 
 // External Crate Imports
@@ -15,7 +16,12 @@ use duct::cmd;
 use serde_json::Value;
 
 // Local Crate Imports
-use crate::{handle::Handle, modifications::Modifications, proteins::Proteins, samples::Samples};
+use crate::{
+    handle::{Handle, Hook},
+    modifications::Modifications,
+    proteins::Proteins,
+    samples::Samples,
+};
 
 // Public API ==========================================================================================================
 
@@ -233,19 +239,27 @@ impl Workflow {
                 Ok(())
             });
 
-            let cleanup_outputs = move |wflw_path: &Path, result_path: &Path| {
+            let cleanup_outputs = |wflw_path: &Path, result_path: &Path| {
                 fs::remove_file(wflw_path)?;
                 fs::remove_dir_all(result_path)?;
                 Ok(())
             };
 
+            let map_err_to_log_file = |result: Result<Output>, log_file: &Path| {
+                let log_file = log_file.display();
+                result.wrap_err_with(||
+                    format!("Byos failed whilst processing this job, check the log file for details: {log_file}")
+                )
+            };
+
             let post_kill = {
                 let wflw_path = wflw_path.clone();
                 let result_path = result_path.clone();
-                move || cleanup_outputs(&wflw_path, &result_path)
+                Box::new(move |result| cleanup_outputs(&wflw_path, &result_path).and(result))
             };
 
-            let post_wait = if working_directory.is_some() {
+            let log_file = log_file.clone();
+            let post_wait: Hook<Output> = if working_directory.is_some() {
                 let working_wflw_path = wflw_path.clone();
                 let working_result_path = result_path.clone();
                 // SAFETY: My code has full control over the `wflw_` and `result_` paths, so I can guarantee that
@@ -254,16 +268,18 @@ impl Workflow {
                     output_directory.join(working_wflw_path.file_name().unwrap());
                 let output_result_path =
                     output_directory.join(working_result_path.file_name().unwrap());
-                Some(move || {
+                Box::new(move |result| {
                     fs::copy(&working_wflw_path, &output_wflw_path)?;
                     dircpy::CopyBuilder::new(&working_result_path, &output_result_path)
                         .overwrite(true)
                         .run_par()?;
 
-                    cleanup_outputs(&working_wflw_path, &working_result_path)
+                    cleanup_outputs(&working_wflw_path, &working_result_path)?;
+
+                    map_err_to_log_file(result, &log_file)
                 })
             } else {
-                None
+                Box::new(move |result| map_err_to_log_file(result, &log_file))
             };
 
             // ---------------------------------------------------------------------------------------------------------
@@ -275,11 +291,7 @@ impl Workflow {
                 .wrap_err_with(|| format!("failed to run workflow {name}"))?
                 .into();
 
-            handle.set_post_kill(post_kill);
-
-            if let Some(post_wait) = post_wait {
-                handle.set_post_wait(post_wait);
-            }
+            handle.post_kill(post_kill).post_wait(post_wait);
 
             Ok(handle)
         };
@@ -328,6 +340,10 @@ pub mod tests {
         result_directory_in(temporary_directory).join("Result")
     }
 
+    pub fn log_file_in(temporary_directory: impl AsRef<Path>) -> PathBuf {
+        result_directory_in(temporary_directory).join("log.txt")
+    }
+
     // SAFETY: It's unsafe for multiple threads to call `env::set_var()`, but given I'm using cargo-nextest which
     // launches each test as its own process, it should be alright... Honestly, even if it does result in unsafe
     // behaviour, these are just tests, so I don't reckon it can do too much damage...
@@ -358,10 +374,6 @@ pub mod tests {
     const PROTEIN_TXT_FILE: &str = "tests/data/proteins.txt";
 
     const REFERENCE_WFLW_FILE: &str = formatc!("tests/data/output/Reference {WORKFLOW_NAME}.wflw");
-
-    fn log_file_in(temporary_directory: impl AsRef<Path>) -> PathBuf {
-        result_directory_in(temporary_directory).join("log.txt")
-    }
 
     // TODO: To get these tests working on Windows, I think I'll need to create `scripts/windows` and `scripts/unix`
     // directories and use conditional compilation to set `TEST_SCRIPTS` accordingly!

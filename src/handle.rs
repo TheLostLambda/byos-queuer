@@ -4,39 +4,41 @@ use color_eyre::Result;
 
 pub struct Handle {
     inner: duct::Handle,
-    post_wait: Option<Hook>,
-    post_kill: Option<Hook>,
+    post_kill: Option<Hook<()>>,
+    post_wait: Option<Hook<Output>>,
 }
 
-type Hook = Box<dyn Fn() -> Result<()> + Send + Sync>;
+pub type Hook<T> = Box<dyn Fn(Result<T>) -> Result<T> + Send + Sync>;
 
 impl Handle {
-    pub fn set_post_wait(&mut self, post_wait: impl Fn() -> Result<()> + Send + Sync + 'static) {
-        self.post_wait = Some(Box::new(post_wait) as Hook);
+    pub fn post_kill(&mut self, post_kill: Hook<()>) -> &mut Self {
+        self.post_kill = Some(post_kill);
+        self
     }
 
-    pub fn set_post_kill(&mut self, post_kill: impl Fn() -> Result<()> + Send + Sync + 'static) {
-        self.post_kill = Some(Box::new(post_kill) as Hook);
-    }
-
-    pub fn wait(&self) -> Result<&Output> {
-        let result = self.inner.wait();
-
-        if let Some(post_wait) = &self.post_wait {
-            post_wait()?;
-        }
-
-        result.map_err(Into::into)
+    pub fn post_wait(&mut self, post_wait: Hook<Output>) -> &mut Self {
+        self.post_wait = Some(post_wait);
+        self
     }
 
     pub fn kill(&self) -> Result<()> {
-        let result = self.inner.kill();
+        let result = self.inner.kill().map_err(Into::into);
 
         if let Some(post_kill) = &self.post_kill {
-            post_kill()?;
+            post_kill(result)
+        } else {
+            result
         }
+    }
 
-        result.map_err(Into::into)
+    pub fn wait(&self) -> Result<Output> {
+        let result = self.inner.wait().map(ToOwned::to_owned).map_err(Into::into);
+
+        if let Some(post_wait) = &self.post_wait {
+            post_wait(result)
+        } else {
+            result
+        }
     }
 }
 
@@ -98,40 +100,40 @@ mod tests {
     }
 
     #[test]
-    fn post_wait() {
-        let post_wait_called = Arc::new(Mutex::new(false));
-        let post_wait = {
-            let post_wait_called = Arc::clone(&post_wait_called);
-            move || {
-                *post_wait_called.lock().unwrap() = true;
-                Ok(())
-            }
-        };
-
-        let mut handle = sleeping_handle();
-        handle.set_post_wait(post_wait);
-
-        assert!(!*post_wait_called.lock().unwrap());
-        handle.wait().unwrap();
-        assert!(*post_wait_called.lock().unwrap());
-    }
-
-    #[test]
     fn post_kill() {
         let post_kill_called = Arc::new(Mutex::new(false));
         let post_kill = {
             let post_kill_called = Arc::clone(&post_kill_called);
-            move || {
+            Box::new(move |result| {
                 *post_kill_called.lock().unwrap() = true;
-                Ok(())
-            }
+                result
+            })
         };
 
         let mut handle = sleeping_handle();
-        handle.set_post_kill(post_kill);
+        handle.post_kill(post_kill);
 
         assert!(!*post_kill_called.lock().unwrap());
         handle.kill().unwrap();
         assert!(*post_kill_called.lock().unwrap());
+    }
+
+    #[test]
+    fn post_wait() {
+        let post_wait_called = Arc::new(Mutex::new(false));
+        let post_wait = {
+            let post_wait_called = Arc::clone(&post_wait_called);
+            Box::new(move |result| {
+                *post_wait_called.lock().unwrap() = true;
+                result
+            })
+        };
+
+        let mut handle = sleeping_handle();
+        handle.post_wait(post_wait);
+
+        assert!(!*post_wait_called.lock().unwrap());
+        handle.wait().unwrap();
+        assert!(*post_wait_called.lock().unwrap());
     }
 }

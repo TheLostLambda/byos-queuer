@@ -170,8 +170,8 @@ pub mod tests {
         assert_unpark_within_ms,
         worker_pool::tests::{ThreadParker, sleep_ms},
         workflow::tests::{
-            BASE_WORKFLOW, MODIFICATIONS_FILE, PROTEIN_FASTA_FILE, SAMPLE_FILES, result_file_in,
-            wflw_file_in, with_test_path,
+            BASE_WORKFLOW, MODIFICATIONS_FILE, PROTEIN_FASTA_FILE, SAMPLE_FILES, log_file_in,
+            with_test_path,
         },
     };
 
@@ -199,8 +199,7 @@ pub mod tests {
     #[test]
     fn new_then_run() {
         let temporary_directory = tempdir().unwrap();
-        let wflw_file = wflw_file_in(&temporary_directory);
-        let result_file = result_file_in(&temporary_directory);
+        let log_file = log_file_in(&temporary_directory);
 
         // Construct a new workflow
         let workflow = Workflow::new(
@@ -253,11 +252,10 @@ pub mod tests {
         assert_eq!(status(&job), Failed);
         if let Status::Failed(report, run_time) = job.status() {
             assert_eq!(
-                format!("{report:#}"),
+                format!("{report}"),
                 format!(
-                    r#"command ["PMi-Byos-Console.exe", "--mode=create-project", "--input", "{}", "--output", "{}"] exited with code 42"#,
-                    wflw_file.display(),
-                    result_file.display()
+                    "Byos failed whilst processing this job, check the log file for details: {}",
+                    log_file.display()
                 )
             );
             assert!(Duration::from_millis(20) < run_time && run_time < Duration::from_millis(30));
