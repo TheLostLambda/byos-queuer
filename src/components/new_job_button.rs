@@ -38,7 +38,7 @@ pub fn NewJobButton(status: QueueStatus) -> Element {
                 },
                 {content}
             }
-            NewJobModal { id: MODAL_ID }
         }
+        NewJobModal { id: MODAL_ID }
     }
 }

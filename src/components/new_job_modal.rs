@@ -76,11 +76,13 @@ pub fn NewJobModal(id: &'static str) -> Element {
 
                 h3 { class: "text-lg font-bold text-center mb-1", "Queue Job(s)" }
 
-                BaseWorkflow { value: base_workflow }
-                SampleFiles { value: sample_files }
-                ProteinFile { value: protein_file }
-                ModificationsFile { value: modifications_file }
-                OutputDirectory { value: output_directory }
+                div { class: "grid grid-cols-[min-content_1fr] gap-y-4",
+                    BaseWorkflow { value: base_workflow }
+                    SampleFiles { value: sample_files }
+                    ProteinFile { value: protein_file }
+                    ModificationsFile { value: modifications_file }
+                    OutputDirectory { value: output_directory }
+                }
                 GroupSamples { value: grouped }
 
                 if let Some(error_message) = error_message() {

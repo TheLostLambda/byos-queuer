@@ -40,7 +40,7 @@ pub fn FilePathPicker(
     });
 
     rsx! {
-        label { class: "input w-full",
+        label { class: "col-span-2 grid grid-cols-subgrid input w-full",
             span { class: "label tooltip",
                 {label}
 
