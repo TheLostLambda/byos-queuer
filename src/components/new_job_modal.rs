@@ -57,16 +57,13 @@ pub fn NewJobModal(id: &'static str) -> Element {
         }
     };
 
-    // NOTE: This is something of a hack, since ideally the required file inputs would just be marked `required`, and
-    // the form would only allow submission when those requirements are met, but `<input type="file">` is deeply broken
-    // in Dioxus at the moment and doesn't seem to acknowledge when files have been uploaded (so validation always
-    // fails, even if you've uploaded something)
     let disabled = use_memo(move || {
         base_workflow().is_none()
             || sample_files().is_empty()
             || protein_file().is_none()
             || output_directory().is_none()
     });
+
     rsx! {
         dialog { class: "modal", id,
             form {

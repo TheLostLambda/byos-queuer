@@ -14,15 +14,8 @@ use crate::{
 
 #[component]
 pub fn SettingsModal(id: &'static str) -> Element {
-    let read_workers = || QUEUE.read().unwrap().workers().to_string();
-    let read_stagger_duration = || {
-        QUEUE
-            .read()
-            .unwrap()
-            .stagger_duration()
-            .as_secs()
-            .to_string()
-    };
+    let read_workers = || Some(QUEUE.read().unwrap().workers());
+    let read_stagger_duration = || Some(QUEUE.read().unwrap().stagger_duration().as_secs());
     let mut workers = use_signal(read_workers);
     let mut stagger_duration = use_signal(read_stagger_duration);
 
@@ -39,8 +32,10 @@ pub fn SettingsModal(id: &'static str) -> Element {
     };
 
     let onsubmit = move |_| {
-        let workers = workers().parse().unwrap();
-        let stagger_duration = Duration::from_secs(stagger_duration().parse().unwrap());
+        // SAFETY: Submission should only be possible if all of the required values are `Some(...)`, so these unwraps
+        // should never panic
+        let workers = workers().unwrap();
+        let stagger_duration = Duration::from_secs(stagger_duration().unwrap());
 
         let mut queue = QUEUE.write().unwrap();
         queue.set_workers(workers).unwrap();
@@ -49,6 +44,12 @@ pub fn SettingsModal(id: &'static str) -> Element {
 
         close_modal();
     };
+
+    // SAFETY: The `.is_none()` calls will "short-circuit" this logic, so there is no risk of ever trying to `.unwrap()`
+    // a `None` value and, therefore, no risk of panicking
+    let disabled = use_memo(move || {
+        workers().is_none() || stagger_duration().is_none() || workers().unwrap() < 1
+    });
 
     rsx! {
         dialog { class: "modal", id,
@@ -60,8 +61,14 @@ pub fn SettingsModal(id: &'static str) -> Element {
                 h3 { class: "text-lg font-bold text-center mb-1", "Queue Settings" }
 
                 div { class: "grid grid-cols-[min-content_1fr_min-content] gap-y-4",
-                    MaximumConcurrentJobs { value: workers }
-                    LaunchInterval { value: stagger_duration }
+                    MaximumConcurrentJobs {
+                        value: workers,
+                        oninput: move |value| workers.set(value),
+                    }
+                    LaunchInterval {
+                        value: stagger_duration,
+                        oninput: move |value| stagger_duration.set(value),
+                    }
                 }
 
                 div { class: "modal-action mt-2",
@@ -72,7 +79,12 @@ pub fn SettingsModal(id: &'static str) -> Element {
                         onclick: move |_| close_modal(),
                         "Cancel"
                     }
-                    button { class: "btn grow btn-primary", r#type: "submit", "Save" }
+                    button {
+                        class: "btn grow btn-primary",
+                        r#type: "submit",
+                        disabled,
+                        "Save"
+                    }
                 }
             }
         }
