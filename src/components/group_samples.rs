@@ -8,20 +8,18 @@ use dioxus::prelude::*;
 #[component]
 pub fn GroupSamples(value: Signal<bool>) -> Element {
     rsx! {
-        div {
-            div { class: "flex justify-between w-full",
-                span { class: "label tooltip",
-                    "Group Samples"
+        label { class: "flex justify-between w-full",
+            span { class: "label tooltip",
+                "Group Samples"
 
-                    // FIXME: Fill this in!!!
-                    p { class: "tooltip-content", "***TODO***" }
-                }
-                input {
-                    class: "toggle",
-                    value,
-                    oninput: move |event| value.set(event.value().parse().unwrap()),
-                    r#type: "checkbox",
-                }
+                // FIXME: Fill this in!!!
+                p { class: "tooltip-content", "***TODO***" }
+            }
+            input {
+                class: "toggle",
+                value,
+                oninput: move |event| value.set(event.value().parse().unwrap()),
+                r#type: "checkbox",
             }
         }
     }
