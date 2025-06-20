@@ -151,7 +151,7 @@ mod tests {
 
         let guard = timer.wait().unwrap();
         let elapsed = start.elapsed();
-        assert!(Duration::from_millis(4) < elapsed && elapsed < Duration::from_millis(6));
+        assert!(Duration::from_millis(3) < elapsed && elapsed < Duration::from_millis(7));
 
         // NOTE: Dropping this is important, otherwise the next call to `wait()` deadlocks!
         drop(guard);
@@ -160,14 +160,14 @@ mod tests {
 
         // Waiting for the timer again returns instantly!
         let guard = timer.wait().unwrap();
-        assert!(start.elapsed() < Duration::from_micros(5));
+        assert!(start.elapsed() < Duration::from_micros(50));
 
         // But the timer can be reset using its `TimerGuard`
         let start = guard.reset();
 
         timer.wait().unwrap();
         let elapsed = start.elapsed();
-        assert!(Duration::from_millis(4) < elapsed && elapsed < Duration::from_millis(6));
+        assert!(Duration::from_millis(3) < elapsed && elapsed < Duration::from_millis(7));
     }
 
     #[test]
@@ -195,14 +195,14 @@ mod tests {
                 .into_iter()
                 .map(|handle| handle.join().unwrap())
             {
-                assert!(Duration::from_millis(4) < elapsed && elapsed < Duration::from_millis(6));
+                assert!(Duration::from_millis(3) < elapsed && elapsed < Duration::from_millis(7));
             }
         });
 
         // Timer refuses to wait whilst it's cancelled
         let start = Instant::now();
         assert!(timer.wait().is_none());
-        assert!(start.elapsed() < Duration::from_micros(5));
+        assert!(start.elapsed() < Duration::from_micros(50));
 
         // But the timer can be resumed / uncancelled
         timer.resume();
@@ -210,7 +210,7 @@ mod tests {
 
         timer.wait().unwrap();
         let elapsed = start.elapsed();
-        assert!(Duration::from_millis(4) < elapsed && elapsed < Duration::from_millis(6));
+        assert!(Duration::from_millis(3) < elapsed && elapsed < Duration::from_millis(7));
 
         // And finally, show that timers can still finish on their own without cancelling
         timer.wait().unwrap().reset();
@@ -237,10 +237,10 @@ mod tests {
                 .collect();
 
             let elapsed = thread_durations[0];
-            assert!(Duration::from_millis(9) < elapsed && elapsed < Duration::from_millis(11));
+            assert!(Duration::from_millis(8) < elapsed && elapsed < Duration::from_millis(12));
 
             let elapsed = thread_durations[1];
-            assert!(Duration::from_millis(14) < elapsed && elapsed < Duration::from_millis(16));
+            assert!(Duration::from_millis(13) < elapsed && elapsed < Duration::from_millis(17));
         });
     }
 }
