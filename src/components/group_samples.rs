@@ -12,8 +12,11 @@ pub fn GroupSamples(value: Signal<bool>) -> Element {
             span { class: "label tooltip",
                 "Group Samples"
 
-                // FIXME: Fill this in!!!
-                p { class: "tooltip-content", "***TODO***" }
+                p { class: "tooltip-content",
+                    "By default, every sample file is split out into its own job. This speeds up computation by \
+                     bypassing Byos's slow cross-sample correlation step, but where you're processing replicates and \
+                     want their search results combined, it can be toggled back on"
+                }
             }
             input {
                 class: "toggle",
