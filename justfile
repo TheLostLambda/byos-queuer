@@ -1,3 +1,5 @@
+set windows-shell := ["C:\\Program Files\\Git\\bin\\sh.exe","-c"]
+
 watch:
     watchexec -e rs,toml just test lint
 
