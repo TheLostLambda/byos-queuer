@@ -9,7 +9,7 @@ use dioxus::prelude::*;
 use crate::{
     QUEUE,
     components::{
-        base_workflow::BaseWorkflow, group_samples::GroupSamples,
+        base_workflow::BaseWorkflow, delete_icon::DeleteIcon, group_samples::GroupSamples,
         modifications_file::ModificationsFile, output_directory::OutputDirectory,
         protein_file::ProteinFile, sample_files::SampleFiles,
     },
@@ -24,6 +24,8 @@ pub fn NewJobModal(id: &'static str) -> Element {
     let output_directory = use_signal(|| None);
     let grouped = use_signal(|| false);
 
+    let mut error_message = use_signal(|| None);
+
     let close_modal = move || {
         document::eval(&format!("{id}.close()"));
     };
@@ -37,17 +39,22 @@ pub fn NewJobModal(id: &'static str) -> Element {
 
         // SAFETY: Submission should only be possible if all of the required values are `Some(...)`, so these unwraps
         // should never panic
-        queue_jobs(
+        let result = queue_jobs(
             &QUEUE.read().unwrap(),
             &base_workflow().unwrap(),
             &sample_files(),
             &protein_file().unwrap(),
             modifications_file().as_ref(),
             &output_directory().unwrap(),
-            // FIXME: I do need to deal with this `.unwrap()` though!
-        )
-        .unwrap();
-        close_modal();
+        );
+
+        match result {
+            Ok(()) => {
+                error_message.set(None);
+                close_modal();
+            }
+            Err(report) => error_message.set(Some(report.to_string())),
+        }
     };
 
     // NOTE: This is something of a hack, since ideally the required file inputs would just be marked `required`, and
@@ -75,6 +82,13 @@ pub fn NewJobModal(id: &'static str) -> Element {
                 ModificationsFile { value: modifications_file }
                 OutputDirectory { value: output_directory }
                 GroupSamples { value: grouped }
+
+                if let Some(error_message) = error_message() {
+                    div { role: "alert", class: "alert alert-error",
+                        DeleteIcon {}
+                        {error_message}
+                    }
+                }
 
                 div { class: "modal-action mt-2",
                     button {
