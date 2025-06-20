@@ -503,7 +503,7 @@ impl Queue {
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Mutex, thread};
+    use std::sync::Mutex;
 
     use tempfile::tempdir;
 
@@ -522,8 +522,7 @@ mod tests {
     const WT_WORKFLOW_NAME: &str = "PG Monomers (WT; proteins.fasta; modifications.txt)";
     const LDT_WORKFLOW_NAME: &str = "PG Monomers (6ldt; proteins.fasta; modifications.txt)";
 
-    const FAST_PATH: &str = "tests/scripts/queue-fast";
-    const SLOW_PATH: &str = "tests/scripts/queue-slow";
+    const TEST_PATH: &str = "tests/scripts/queue";
 
     fn job_statuses(queue: &Queue) -> Vec<JobStatusDiscriminant> {
         queue
@@ -531,14 +530,6 @@ mod tests {
             .into_iter()
             .map(|(_, status)| status.into())
             .collect()
-    }
-
-    fn sleep_until_elapsed_ms(instant: Instant, millis: u64) {
-        let target = Duration::from_millis(millis);
-        let elapsed = instant.elapsed();
-        let duration_to_go = target.saturating_sub(elapsed);
-
-        thread::sleep(duration_to_go);
     }
 
     #[test]
@@ -660,7 +651,7 @@ mod tests {
             assert_eq!(queue.status(), Status::Finished);
         };
 
-        unsafe { with_test_path(FAST_PATH, test_code) }
+        unsafe { with_test_path(TEST_PATH, test_code) }
     }
 
     #[test]
@@ -668,7 +659,7 @@ mod tests {
         let temporary_directory = tempdir().unwrap();
 
         // First, queue an initial `Job`
-        let queue = Queue::new(2, Duration::from_millis(100)).unwrap();
+        let queue = Queue::new(2, Duration::from_millis(20)).unwrap();
 
         queue
             .queue_grouped_job(
@@ -696,7 +687,6 @@ mod tests {
             assert_eq!(queue.worker_pool.available_workers(), 1);
             assert_eq!(job_statuses(&queue), [Running]);
 
-            let instant = Instant::now();
             queue
                 .queue_jobs(
                     BASE_WORKFLOW,
@@ -707,29 +697,32 @@ mod tests {
                 )
                 .unwrap();
 
-            sleep_until_elapsed_ms(instant, 230);
+            assert_eq!(queue.worker_pool.available_workers(), 0);
+            assert_eq!(job_statuses(&queue), [Running, Queued, Queued]);
+
+            sleep_ms(25);
 
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Running, Running, Queued]);
 
-            sleep_ms(40);
+            sleep_ms(65);
 
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Completed, Running, Running]);
 
-            sleep_ms(170);
+            sleep_ms(90);
 
             assert_eq!(queue.worker_pool.available_workers(), 1);
-            assert_eq!(job_statuses(&queue), [Completed, Completed, Running]);
+            assert_eq!(job_statuses(&queue), [Completed, Failed, Running]);
 
-            sleep_ms(40);
+            sleep_ms(60);
 
             assert_eq!(queue.status(), Status::Finished);
             assert_eq!(queue.worker_pool.available_workers(), 2);
-            assert_eq!(job_statuses(&queue), [Completed, Completed, Completed]);
+            assert_eq!(job_statuses(&queue), [Completed, Failed, Completed]);
         };
 
-        unsafe { with_test_path(SLOW_PATH, test_code) }
+        unsafe { with_test_path(TEST_PATH, test_code) }
     }
 
     #[test]
@@ -799,7 +792,7 @@ mod tests {
             assert_eq!(queue.status(), Status::Finished);
         };
 
-        unsafe { with_test_path(FAST_PATH, test_code) }
+        unsafe { with_test_path(TEST_PATH, test_code) }
 
         // Reconfigure the queue and add some new `Job`s
 
@@ -866,7 +859,7 @@ mod tests {
             assert_eq!(queue.status(), Status::Finished);
         };
 
-        unsafe { with_test_path(FAST_PATH, test_code) }
+        unsafe { with_test_path(TEST_PATH, test_code) }
 
         assert_eq!(
             job_statuses(&queue),
@@ -945,7 +938,7 @@ mod tests {
             assert_eq!(job_statuses(&queue), [Completed, Queued, Queued]);
         };
 
-        unsafe { with_test_path(FAST_PATH, test_code) }
+        unsafe { with_test_path(TEST_PATH, test_code) }
     }
 
     #[test]
@@ -1032,7 +1025,7 @@ mod tests {
             );
         };
 
-        unsafe { with_test_path(FAST_PATH, test_code) }
+        unsafe { with_test_path(TEST_PATH, test_code) }
     }
 
     #[test]
@@ -1138,7 +1131,7 @@ mod tests {
             );
         };
 
-        unsafe { with_test_path(FAST_PATH, test_code) }
+        unsafe { with_test_path(TEST_PATH, test_code) }
     }
 
     #[test]
@@ -1324,7 +1317,7 @@ mod tests {
             assert!(thread_parker.no_missed_parks());
         };
 
-        unsafe { with_test_path(FAST_PATH, test_code) }
+        unsafe { with_test_path(TEST_PATH, test_code) }
 
         let updates = updates.lock().unwrap();
         let expected: &[&[(&[JobStatusDiscriminant], Status)]] = &[
