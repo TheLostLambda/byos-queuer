@@ -65,7 +65,7 @@ pub fn NewJobModal(id: &'static str) -> Element {
     });
 
     rsx! {
-        dialog { class: "modal", id,
+        dialog { class: "modal [scrollbar-gutter:unset]", id,
             form {
                 class: "modal-box overflow-visible flex flex-col items-stretch gap-4",
                 method: "dialog",
