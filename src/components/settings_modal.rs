@@ -59,8 +59,10 @@ pub fn SettingsModal(id: &'static str) -> Element {
 
                 h3 { class: "text-lg font-bold text-center mb-1", "Queue Settings" }
 
-                MaximumConcurrentJobs { value: workers }
-                LaunchInterval { value: stagger_duration }
+                div { class: "grid grid-cols-[min-content_1fr_min-content] gap-y-4",
+                    MaximumConcurrentJobs { value: workers }
+                    LaunchInterval { value: stagger_duration }
+                }
 
                 div { class: "modal-action mt-2",
                     button {

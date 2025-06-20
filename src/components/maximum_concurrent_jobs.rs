@@ -8,24 +8,23 @@ use dioxus::prelude::*;
 #[component]
 pub fn MaximumConcurrentJobs(value: Signal<String>) -> Element {
     rsx! {
-        div {
-            label { class: "input w-full",
-                span { class: "label tooltip",
-                    "Maximum Concurrent Jobs"
+        label { class: "col-span-3 grid grid-cols-subgrid input w-full",
+            span { class: "label tooltip",
+                "Maximum Concurrent Jobs"
 
-                    p { class: "tooltip-content",
-                        "Limits the number of jobs that can be run at once. Increasing this number can lead to higher \
+                p { class: "tooltip-content",
+                    "Limits the number of jobs that can be run at once. Increasing this number can lead to higher \
                         throughput (more jobs completed per unit of time), but individual jobs will take longer to \
                         complete, and — if this parameter is set too high — the computer could run out of memory."
-                    }
                 }
-                input {
-                    value,
-                    oninput: move |event| value.set(event.value()),
-                    min: "1",
-                    r#type: "number",
-                    required: "true",
-                }
+            }
+            input {
+                class: "col-span-2",
+                value,
+                oninput: move |event| value.set(event.value()),
+                min: "1",
+                r#type: "number",
+                required: "true",
             }
         }
     }
