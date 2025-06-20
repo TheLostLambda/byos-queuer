@@ -17,7 +17,7 @@ pub fn OutputDirectory(value: Signal<Option<String>>) -> Element {
     rsx! {
         FilePathPicker {
             label: "Output Directory",
-            tooltip: "***TODO***",
+            tooltip: "The directory to write .wflw files and search results to",
             value: paths,
             directory: true,
         }
