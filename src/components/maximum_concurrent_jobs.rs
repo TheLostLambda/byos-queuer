@@ -14,8 +14,8 @@ pub fn MaximumConcurrentJobs(
 
                 p { class: "tooltip-content",
                     "Limits the number of jobs that can be run at once. Increasing this number can lead to higher \
-                        throughput (more jobs completed per unit of time), but individual jobs will take longer to \
-                        complete, and — if this parameter is set too high — the computer could run out of memory."
+                     throughput (more jobs completed per unit of time), but individual jobs will take longer to \
+                     complete, and — if this parameter is set too high — the computer could run out of memory"
                 }
             }
             OptionallyValidInput {
