@@ -29,6 +29,7 @@ mod settings_button;
 mod settings_icon;
 mod settings_modal;
 mod top_bar;
+mod working_directory;
 
 pub use header::Header;
 pub use job_queue::JobQueue;

@@ -11,7 +11,7 @@ use crate::{
     components::{
         base_workflow::BaseWorkflow, delete_icon::DeleteIcon, group_samples::GroupSamples,
         modifications_file::ModificationsFile, output_directory::OutputDirectory,
-        protein_file::ProteinFile, sample_files::SampleFiles,
+        protein_file::ProteinFile, sample_files::SampleFiles, working_directory::WorkingDirectory,
     },
 };
 
@@ -21,6 +21,7 @@ pub fn NewJobModal(id: &'static str) -> Element {
     let sample_files = use_signal(Vec::new);
     let protein_file = use_signal(|| None);
     let modifications_file = use_signal(|| None);
+    let working_directory = use_signal(|| None);
     let output_directory = use_signal(|| None);
     let grouped = use_signal(|| false);
 
@@ -45,8 +46,7 @@ pub fn NewJobModal(id: &'static str) -> Element {
             &sample_files(),
             &protein_file().unwrap(),
             modifications_file().as_ref(),
-            // FIXME: Replace this with a real value from the UI!
-            None::<&str>,
+            working_directory().as_ref(),
             &output_directory().unwrap(),
         );
 
@@ -80,6 +80,7 @@ pub fn NewJobModal(id: &'static str) -> Element {
                     SampleFiles { value: sample_files }
                     ProteinFile { value: protein_file }
                     ModificationsFile { value: modifications_file }
+                    WorkingDirectory { value: working_directory }
                     OutputDirectory { value: output_directory }
                 }
                 GroupSamples { value: grouped }

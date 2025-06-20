@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 use crate::components::file_path_picker::FilePathPicker;
 
 #[component]
-pub fn ModificationsFile(value: Signal<Option<String>>) -> Element {
+pub fn WorkingDirectory(value: Signal<Option<String>>) -> Element {
     let paths = use_signal(Vec::new);
     use_effect(move || {
         value.set(paths().first().cloned());
@@ -16,10 +16,12 @@ pub fn ModificationsFile(value: Signal<Option<String>>) -> Element {
 
     rsx! {
         FilePathPicker {
-            label: "Modifications File",
-            tooltip: "A optional .txt file containing Byos-compatible \"Custom modification text\"",
+            label: "Working Directory",
+            tooltip: "An optional directory to run Byos searches in before copying results to the output directory. \
+                      Some workflows, especially those generating FTRS files, can be bottlenecked by disk I/O, so \
+                      picking a working directory on an SSD or RAM disk can result in a significant speedup",
             value: paths,
-            accept: ".txt",
+            directory: true,
         }
     }
 }
