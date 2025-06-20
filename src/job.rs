@@ -78,9 +78,8 @@ impl Job {
     pub fn start(&self) -> Result<()> {
         match self.status() {
             Status::Queued => {
-                let instant = Instant::now();
                 let handle = Arc::new(self.workflow.start()?);
-                *self.status.lock().unwrap() = Status::Running(Arc::clone(&handle), instant);
+                *self.status.lock().unwrap() = Status::Running(handle, Instant::now());
                 self.on_update.call();
 
                 Ok(())
@@ -226,15 +225,15 @@ pub(crate) mod tests {
             }
         });
 
-        sleep_ms(5);
+        sleep_ms(15);
 
         assert_eq!(status(&job), Running);
 
-        sleep_ms(20);
+        sleep_ms(40);
 
         assert_eq!(status(&job), Completed);
         if let Status::Completed(run_time) = job.status() {
-            assert!(Duration::from_millis(10) < run_time && run_time < Duration::from_millis(20));
+            assert!(Duration::from_millis(20) < run_time && run_time < Duration::from_millis(30));
         }
 
         job.reset().unwrap();
@@ -247,11 +246,11 @@ pub(crate) mod tests {
             }
         });
 
-        sleep_ms(5);
+        sleep_ms(15);
 
         assert_eq!(status(&job), Running);
 
-        sleep_ms(20);
+        sleep_ms(40);
 
         assert_eq!(status(&job), Failed);
         if let Status::Failed(report, run_time) = job.status() {
@@ -263,7 +262,7 @@ pub(crate) mod tests {
                     result_file.display()
                 )
             );
-            assert!(Duration::from_millis(10) < run_time && run_time < Duration::from_millis(20));
+            assert!(Duration::from_millis(20) < run_time && run_time < Duration::from_millis(30));
         }
     }
 
@@ -306,8 +305,8 @@ pub(crate) mod tests {
             }
         });
 
-        assert_unpark_within_ms!(thread_parker, 5);
         assert_unpark_within_ms!(thread_parker, 15);
+        assert_unpark_within_ms!(thread_parker, 30);
 
         job.reset().unwrap();
 

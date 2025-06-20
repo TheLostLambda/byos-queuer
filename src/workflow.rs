@@ -53,9 +53,7 @@ impl Workflow {
             modifications,
         )?;
 
-        Self::write_wflw(output_directory, &name, &workflow_json)?;
-
-        let launch_command = Self::build_command(output_directory, &name)?;
+        let launch_command = Self::build_command(output_directory, &name, workflow_json)?;
 
         Ok(Self {
             name,
@@ -168,14 +166,8 @@ impl Workflow {
         Ok(())
     }
 
-    fn write_wflw(
-        output_directory: impl AsRef<Path>,
-        name: &str,
-        workflow_json: &Value,
-    ) -> Result<()> {
-        let wflw_path = Self::wflw_path(output_directory, name);
-
-        let mut wflw_file = File::create(&wflw_path)?;
+    fn write_wflw(wflw_path: &Path, workflow_json: &Value) -> Result<()> {
+        let mut wflw_file = File::create(wflw_path)?;
         serde_json::to_writer_pretty(&mut wflw_file, workflow_json)?;
 
         Ok(())
@@ -184,6 +176,7 @@ impl Workflow {
     fn build_command(
         output_directory: impl AsRef<Path> + Copy,
         name: &str,
+        workflow_json: Value,
     ) -> Result<Box<dyn Fn() -> Result<Handle> + Send + Sync>> {
         let wflw_path = Self::wflw_path(output_directory, name);
         let result_path = path::absolute(output_directory.as_ref().join(name))?;
@@ -192,6 +185,8 @@ impl Workflow {
 
         let name = name.to_owned();
         let launch_command = move || {
+            Self::write_wflw(&wflw_path, &workflow_json)?;
+
             if !result_path.exists() {
                 fs::create_dir(&result_path)?;
             }
@@ -317,19 +312,20 @@ pub(crate) mod tests {
         )
         .unwrap();
 
-        assert!(&wflw_file.exists());
+        // Test that the returned `Workflow` has the correct `name` and `launch_command`
+        assert_eq!(workflow.name(), WORKFLOW_NAME);
+
+        assert!(!wflw_file.exists());
+        assert!(!result_directory.exists());
+
+        let handle = unsafe { with_test_path(TEST_PATH, || workflow.start()) }.unwrap();
+        assert!(wflw_file.exists());
 
         let workflow_json = load_wflw_json(&wflw_file);
         let reference_workflow_json = load_wflw_json(REFERENCE_WFLW_FILE);
 
         assert_eq!(workflow_json, reference_workflow_json);
 
-        // Test that the returned `Workflow` has the correct `name` and `launch_command`
-        assert_eq!(workflow.name(), WORKFLOW_NAME);
-
-        assert!(!result_directory.exists());
-
-        let handle = unsafe { with_test_path(TEST_PATH, || workflow.start()) }.unwrap();
         let output = handle.wait();
         assert!(output.is_ok());
 
