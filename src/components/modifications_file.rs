@@ -17,7 +17,7 @@ pub fn ModificationsFile(value: Signal<Option<String>>) -> Element {
     rsx! {
         FilePathPicker {
             label: "Modifications File",
-            tooltip: "A optional .txt file containing Byos-compatible \"Custom modification text\"",
+            tooltip: "An optional .txt file containing Byos-compatible \"Custom modification text\"",
             value: paths,
             accept: ".txt",
         }

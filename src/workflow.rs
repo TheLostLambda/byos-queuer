@@ -181,18 +181,22 @@ impl Workflow {
         name: &str,
         workflow_json: Value,
     ) -> Result<Box<dyn Fn() -> Result<Handle> + Send + Sync>> {
-        let running_directory = working_directory
-            .as_ref()
-            .map_or(output_directory.as_ref(), AsRef::as_ref);
+        let working_directory = working_directory.map(|p| p.as_ref().to_owned());
+        let output_directory = output_directory.as_ref().to_owned();
+
+        if working_directory.as_ref() == Some(&output_directory) {
+            return Err(eyre!(
+                "If a working directory is selected, it must be different from the output directory"
+            ));
+        }
+
+        let running_directory = working_directory.as_ref().unwrap_or(&output_directory);
         let wflw_path = Self::wflw_path(running_directory, name);
         let result_path = path::absolute(running_directory.join(name))?;
         let result_file = result_path.join("Result");
         let log_file = result_path.join("log.txt");
 
         let name = name.to_owned();
-        let had_separate_working_directory = working_directory.is_some();
-        let output_directory = output_directory.as_ref().to_owned();
-
         let launch_command = move || {
             let pre_start = || -> Result<()> {
                 Self::write_wflw(&wflw_path, &workflow_json)?;
@@ -227,7 +231,7 @@ impl Workflow {
                 move || cleanup_outputs(&wflw_path, &result_path)
             };
 
-            let post_wait = if had_separate_working_directory {
+            let post_wait = if working_directory.is_some() {
                 let working_wflw_path = wflw_path.clone();
                 let working_result_path = result_path.clone();
                 // SAFETY: My code has full control over the `wflw_` and `result_` paths, so I can guarantee that
