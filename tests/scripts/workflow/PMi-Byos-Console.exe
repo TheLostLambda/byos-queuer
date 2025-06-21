@@ -6,3 +6,4 @@ echo $2
 echo $3 >&2
 echo $4
 echo $5 >&2
+sleep 0.01

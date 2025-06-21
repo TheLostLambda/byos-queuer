@@ -1,44 +1,47 @@
-use std::process::Output;
+use std::{process::Output, sync::Mutex};
 
 use color_eyre::Result;
 
 pub struct Handle {
     inner: duct::Handle,
-    post_kill: Option<Hook<()>>,
-    post_wait: Option<Hook<Output>>,
+    killed: Mutex<bool>,
+    post_kill: Option<Hook>,
+    post_finish: Option<Hook>,
 }
 
-pub type Hook<T> = Box<dyn Fn(Result<T>) -> Result<T> + Send + Sync>;
+pub type Hook = Box<dyn Fn(Result<Output>) -> Result<Output> + Send + Sync>;
 
 impl Handle {
-    pub fn post_kill(&mut self, post_kill: Hook<()>) -> &mut Self {
+    pub fn post_kill(&mut self, post_kill: Hook) -> &mut Self {
         self.post_kill = Some(post_kill);
         self
     }
 
-    pub fn post_wait(&mut self, post_wait: Hook<Output>) -> &mut Self {
-        self.post_wait = Some(post_wait);
+    pub fn post_finish(&mut self, post_finish: Hook) -> &mut Self {
+        self.post_finish = Some(post_finish);
         self
     }
 
     pub fn kill(&self) -> Result<()> {
-        let result = self.inner.kill().map_err(Into::into);
-
-        if let Some(post_kill) = &self.post_kill {
-            post_kill(result)
-        } else {
-            result
-        }
+        // NOTE: The `post_kill` hook isn't called here, since this just sends a kill signal to the child but doesn't
+        // actually wait for it to die — instead, we set a flag so that `.wait()` knows to call `post_kill` instead of
+        // the normal `post_finish` hook
+        *self.killed.lock().unwrap() = true;
+        self.inner.kill().map_err(Into::into)
     }
 
     pub fn wait(&self) -> Result<Output> {
         let result = self.inner.wait().map(ToOwned::to_owned).map_err(Into::into);
 
-        if let Some(post_wait) = &self.post_wait {
-            post_wait(result)
-        } else {
-            result
+        if *self.killed.lock().unwrap() {
+            if let Some(post_kill) = &self.post_kill {
+                return post_kill(result);
+            }
+        } else if let Some(post_finish) = &self.post_finish {
+            return post_finish(result);
         }
+
+        result
     }
 }
 
@@ -46,8 +49,9 @@ impl From<duct::Handle> for Handle {
     fn from(value: duct::Handle) -> Self {
         Self {
             inner: value,
-            post_wait: None,
+            killed: Mutex::new(false),
             post_kill: None,
+            post_finish: None,
         }
     }
 }
@@ -114,26 +118,29 @@ mod tests {
         handle.post_kill(post_kill);
 
         assert!(!*post_kill_called.lock().unwrap());
+
         handle.kill().unwrap();
+        assert!(handle.wait().is_err());
+
         assert!(*post_kill_called.lock().unwrap());
     }
 
     #[test]
-    fn post_wait() {
-        let post_wait_called = Arc::new(Mutex::new(false));
-        let post_wait = {
-            let post_wait_called = Arc::clone(&post_wait_called);
+    fn post_finish() {
+        let post_finish_called = Arc::new(Mutex::new(false));
+        let post_finish = {
+            let post_finish_called = Arc::clone(&post_finish_called);
             Box::new(move |result| {
-                *post_wait_called.lock().unwrap() = true;
+                *post_finish_called.lock().unwrap() = true;
                 result
             })
         };
 
         let mut handle = sleeping_handle();
-        handle.post_wait(post_wait);
+        handle.post_finish(post_finish);
 
-        assert!(!*post_wait_called.lock().unwrap());
+        assert!(!*post_finish_called.lock().unwrap());
         handle.wait().unwrap();
-        assert!(*post_wait_called.lock().unwrap());
+        assert!(*post_finish_called.lock().unwrap());
     }
 }

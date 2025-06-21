@@ -259,7 +259,7 @@ impl Workflow {
             };
 
             let log_file = log_file.clone();
-            let post_wait: Hook<Output> = if working_directory.is_some() {
+            let post_finish: Hook = if working_directory.is_some() {
                 let working_wflw_path = wflw_path.clone();
                 let working_result_path = result_path.clone();
                 // SAFETY: My code has full control over the `wflw_` and `result_` paths, so I can guarantee that
@@ -291,7 +291,7 @@ impl Workflow {
                 .wrap_err_with(|| format!("failed to run workflow {name}"))?
                 .into();
 
-            handle.post_kill(post_kill).post_wait(post_wait);
+            handle.post_kill(post_kill).post_finish(post_finish);
 
             Ok(handle)
         };
@@ -487,6 +487,7 @@ pub mod tests {
         // Then kill the workflow — ensuring that files are cleaned up!
         handle.kill().unwrap();
         let output = handle.wait();
+
         assert!(output.is_err());
         assert!(!working_wflw_file.exists());
         assert!(!working_result_directory.exists());
