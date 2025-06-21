@@ -6,7 +6,7 @@
 use crate::components::{settings_icon::SettingsIcon, settings_modal::SettingsModal};
 use dioxus::prelude::*;
 
-use byos_queuer::queue::Status as QueueStatus;
+use byos_queuer::QueueStatus;
 
 #[component]
 pub fn SettingsButton(status: QueueStatus) -> Element {

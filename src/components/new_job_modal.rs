@@ -3,7 +3,7 @@
 // `#[expect(...)]` inside of the `#[component]` macro
 #![expect(clippy::derive_partial_eq_without_eq)]
 
-use byos_queuer::queue::Queue;
+use byos_queuer::Queue;
 use dioxus::prelude::*;
 
 use crate::{

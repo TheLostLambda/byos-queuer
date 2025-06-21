@@ -1,4 +1,4 @@
-use byos_queuer::job::Status as JobStatus;
+use byos_queuer::JobStatus;
 use dioxus::prelude::*;
 
 use crate::components::{

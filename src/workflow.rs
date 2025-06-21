@@ -218,7 +218,7 @@ impl Workflow {
 // Unit Tests ==========================================================================================================
 
 #[cfg(test)]
-pub(crate) mod tests {
+pub mod tests {
     use std::env;
 
     use const_format::formatc;

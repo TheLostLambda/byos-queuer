@@ -96,7 +96,7 @@ impl WorkerPool {
 // Unit Tests ==========================================================================================================
 
 #[cfg(test)]
-pub(crate) mod tests {
+pub mod tests {
     use std::{
         sync::{Condvar, Mutex, WaitTimeoutResult},
         time::Duration,

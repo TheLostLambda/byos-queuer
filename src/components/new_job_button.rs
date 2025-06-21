@@ -3,7 +3,7 @@
 // `#[expect(...)]` inside of the `#[component]` macro
 #![expect(clippy::derive_partial_eq_without_eq)]
 
-use byos_queuer::queue::Status as QueueStatus;
+use byos_queuer::QueueStatus;
 use dioxus::prelude::*;
 
 use crate::components::{new_icon::NewIcon, new_job_modal::NewJobModal};

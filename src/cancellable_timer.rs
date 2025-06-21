@@ -89,9 +89,6 @@ pub struct TimerGuard<'a> {
 }
 
 impl TimerGuard<'_> {
-    // NOTE: It's perfectly reasonable to use this method without using its return value (because of `self.0`s interior
-    // mutability, this method *does* have side-effects)
-    #[expect(clippy::must_use_candidate)]
     pub fn reset(mut self) -> Instant {
         *self.start_lock = Instant::now();
         *self.start_lock

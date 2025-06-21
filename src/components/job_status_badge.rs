@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use byos_queuer::job::Status as JobStatus;
+use byos_queuer::JobStatus;
 
 use crate::components::run_timer::RunTime;
 

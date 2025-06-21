@@ -68,9 +68,24 @@ impl Job {
         Ok(())
     }
 
-    pub fn run(&self) -> Result<()> {
-        self.start()?;
-        self.wait();
+    pub fn quiet_reset(&self) -> Result<()> {
+        if let Status::Running(handle, _) = self.status() {
+            *self.status.lock().unwrap() = Status::Resetting;
+            handle.kill()?;
+        } else {
+            *self.status.lock().unwrap() = Status::default();
+        }
+
+        Ok(())
+    }
+
+    pub fn abandon(&self) -> Result<()> {
+        let prereset_status = self.status();
+        *self.status.lock().unwrap() = Status::Abandoned;
+
+        if let Status::Running(handle, _) = prereset_status {
+            handle.kill()?;
+        }
 
         Ok(())
     }
@@ -119,12 +134,10 @@ impl Job {
     }
 }
 
-// Private Helper Code =================================================================================================
-
 // NOTE: This is primarily useful for test code where I don't care about any of the `Status` fields, but I do need a
 // `PartialEq` implementation to use `assert_eq!(...)`
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub(crate) enum StatusDiscriminant {
+pub enum StatusDiscriminant {
     Queued,
     Running,
     Stopping,
@@ -146,34 +159,10 @@ impl From<Status> for StatusDiscriminant {
     }
 }
 
-impl Job {
-    pub(crate) fn quiet_reset(&self) -> Result<()> {
-        if let Status::Running(handle, _) = self.status() {
-            *self.status.lock().unwrap() = Status::Resetting;
-            handle.kill()?;
-        } else {
-            *self.status.lock().unwrap() = Status::default();
-        }
-
-        Ok(())
-    }
-
-    pub(crate) fn abandon(&self) -> Result<()> {
-        let prereset_status = self.status();
-        *self.status.lock().unwrap() = Status::Abandoned;
-
-        if let Status::Running(handle, _) = prereset_status {
-            handle.kill()?;
-        }
-
-        Ok(())
-    }
-}
-
 // Unit Tests ==========================================================================================================
 
 #[cfg(test)]
-pub(crate) mod tests {
+pub mod tests {
     use std::thread;
 
     use tempfile::tempdir;
@@ -194,6 +183,15 @@ pub(crate) mod tests {
     // `tests/scripts/unix` at compile time
     const COMPLETES_PATH: &str = "tests/scripts/job-completes";
     const FAILS_PATH: &str = "tests/scripts/job-fails";
+
+    impl Job {
+        fn run(&self) -> Result<()> {
+            self.start()?;
+            self.wait();
+
+            Ok(())
+        }
+    }
 
     fn status(job: &Job) -> StatusDiscriminant {
         StatusDiscriminant::from(job.status())

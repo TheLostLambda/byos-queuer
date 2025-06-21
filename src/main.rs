@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use byos_queuer::queue::Queue;
+use byos_queuer::Queue;
 use color_eyre::Result;
 use dioxus::{
     desktop::{self, WindowBuilder},
