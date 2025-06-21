@@ -25,8 +25,11 @@ pub fn FilePathPicker(
             let path_count = value().len();
             let file_names = value()
                 .iter()
-                .filter_map(|path_string| {
-                    Path::new(path_string).file_name().and_then(OsStr::to_str)
+                .map(|path_string| {
+                    Path::new(path_string)
+                        .file_name()
+                        .and_then(OsStr::to_str)
+                        .unwrap_or(path_string)
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
