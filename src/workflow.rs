@@ -219,6 +219,20 @@ impl Workflow {
             .stderr_to_stdout()
             .stdout_path(&log_file);
 
+            // NOTE: This is needed on Windows to stop terminals from popping open whenever a job is run
+            #[cfg(windows)]
+            let cmd = cmd.before_spawn(|command| {
+                use std::os::windows::process::CommandExt;
+
+                // NOTE: For more information, see the list of all process creation flags:
+                // https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags
+                const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+                command.creation_flags(CREATE_NO_WINDOW);
+
+                Ok(())
+            });
+
             let cleanup_outputs = move |wflw_path: &Path, result_path: &Path| {
                 fs::remove_file(wflw_path)?;
                 fs::remove_dir_all(result_path)?;
