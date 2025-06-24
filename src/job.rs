@@ -1,5 +1,6 @@
 // Standard Library Imports
 use std::{
+    mem,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -15,9 +16,8 @@ use crate::{handle::Handle, on_update::OnUpdate, workflow::Workflow};
 
 // Public API ==========================================================================================================
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub enum Status {
-    #[default]
     Queued,
     Running(Arc<Handle>, Instant),
     Resetting,
@@ -34,8 +34,8 @@ pub struct Job {
 
 impl Job {
     #[must_use]
-    pub fn new(workflow: Workflow, on_update: OnUpdate) -> Self {
-        let status = Mutex::new(Status::default());
+    pub const fn new(workflow: Workflow, on_update: OnUpdate) -> Self {
+        let status = Mutex::new(Status::Queued);
 
         Self {
             workflow,
@@ -54,7 +54,7 @@ impl Job {
     }
 
     pub fn reset(&self) -> Result<()> {
-        if matches!(self.status(), Status::Queued) {
+        if matches!(self.status(), Status::Queued | Status::Resetting) {
             return Ok(());
         }
 
@@ -68,12 +68,18 @@ impl Job {
     }
 
     pub fn quiet_reset(&self) -> Result<()> {
-        if let Status::Running(handle, _) = self.status() {
-            *self.status.lock().unwrap() = Status::Resetting;
+        // NOTE: Locking open ensures that `self.status` can't change between checking `self.status()` and actually
+        // resetting the `Job`
+        let mut status_lock = self.status.lock().unwrap();
+
+        if let Status::Running(handle, _) = status_lock.clone() {
+            *status_lock = Status::Resetting;
             handle.kill()?;
         } else {
-            *self.status.lock().unwrap() = Status::default();
+            *status_lock = Status::Queued;
         }
+
+        drop(status_lock);
 
         Ok(())
     }
@@ -110,24 +116,35 @@ impl Job {
     }
 
     pub fn wait(&self) {
-        if let Status::Running(handle, instant) = self.status() {
+        let pre_wait_status = self.status();
+        let pre_wait_discriminant = mem::discriminant(&pre_wait_status);
+
+        if let Status::Running(handle, instant) = pre_wait_status {
             let exit_status = match handle.wait() {
                 Ok(_) => Status::Completed(instant.elapsed()),
                 Err(error) => Status::Failed(Arc::new(error), instant.elapsed()),
             };
 
             // NOTE: We're rechecking the status in case another thread has changed it whilst we've been `.wait()`ing
-            *self.status.lock().unwrap() = match self.status() {
-                Status::Running(..) => exit_status,
-                // NOTE: It takes some time to kill a `Running` `Job` after calling `Job.reset()` — with the child
-                // process now fully dead, we can re-queue the `Job`
-                Status::Resetting => Status::Queued,
-                // NOTE: `Abandoned` `Job`s should not have their statuses updated and should not call `on_update` —
-                // return early to avoid the `self.on_update.call()`
-                Status::Abandoned => return,
-                _ => unreachable!(),
-            };
+            if let Status::Running(..) = self.status() {
+                *self.status.lock().unwrap() = exit_status;
+            }
+        }
 
+        let post_wait_status = self.status();
+        let post_wait_discriminant = mem::discriminant(&post_wait_status);
+
+        match post_wait_status {
+            // NOTE: It takes some time to kill a `Running` `Job` after calling `Job.reset()` — with the child
+            // process now fully dead, we can re-queue the `Job`
+            Status::Resetting => *self.status.lock().unwrap() = Status::Queued,
+            // NOTE: `Abandoned` `Job`s should not have their statuses updated and should not call `on_update` —
+            // return early to avoid the `self.on_update.call()`
+            Status::Abandoned => return,
+            _ => {}
+        }
+
+        if pre_wait_discriminant != post_wait_discriminant {
             self.on_update.call();
         }
     }

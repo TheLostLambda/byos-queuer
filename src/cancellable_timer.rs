@@ -1,6 +1,6 @@
 // Standard Library Imports
 use std::{
-    sync::{Condvar, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError},
+    sync::{Condvar, Mutex, MutexGuard},
     time::{Duration, Instant},
 };
 
@@ -9,25 +9,22 @@ use std::{
 pub struct CancellableTimer {
     start: Mutex<Instant>,
     duration: Duration,
-    cancelled: RwLock<bool>,
+    cancelled: Mutex<bool>,
     condvar: Condvar,
-    condvar_mutex: Mutex<()>,
 }
 
 impl CancellableTimer {
     #[must_use]
     pub const fn new(start: Instant, duration: Duration) -> Self {
         let start = Mutex::new(start);
-        let cancelled = RwLock::new(false);
+        let cancelled = Mutex::new(false);
         let condvar = Condvar::new();
-        let condvar_mutex = Mutex::new(());
 
         Self {
             start,
             duration,
             cancelled,
             condvar,
-            condvar_mutex,
         }
     }
 
@@ -38,24 +35,16 @@ impl CancellableTimer {
 
     #[must_use]
     pub fn cancelled(&self) -> bool {
-        *self.cancelled.read().unwrap()
+        *self.cancelled.lock().unwrap()
     }
 
     pub fn cancel(&self) {
-        // NOTE: Along with `self.cancelled_writer()`, this prevents `self.cancelled` from changing between
-        // `.wait_timeout_while()` and the dropping of `TimerGuard` in `self.wait()`
-        let _condvar_lock = self.condvar_mutex.lock().unwrap();
-
-        *self.cancelled_writer() = true;
+        *self.cancelled.lock().unwrap() = true;
         self.condvar.notify_all();
     }
 
     pub fn resume(&self) {
-        // NOTE: Along with `self.cancelled_writer()`, this prevents `self.cancelled` from changing between
-        // `.wait_timeout_while()` and the dropping of `TimerGuard` in `self.wait()`
-        let _condvar_lock = self.condvar_mutex.lock().unwrap();
-
-        *self.cancelled_writer() = false;
+        *self.cancelled.lock().unwrap() = false;
     }
 
     pub fn wait(&self) -> Option<TimerGuard<'_>> {
@@ -63,68 +52,26 @@ impl CancellableTimer {
         let elapsed = start_lock.elapsed();
         let duration_to_go = self.duration.saturating_sub(elapsed);
 
-        let (condvar_lock, result) = self
+        let (lock, result) = self
             .condvar
-            .wait_timeout_while(self.condvar_mutex.lock().unwrap(), duration_to_go, |()| {
-                !*self.cancelled.read().unwrap()
-            })
+            .wait_timeout_while(
+                self.cancelled.lock().unwrap(),
+                duration_to_go,
+                |&mut cancelled| !cancelled,
+            )
             .unwrap();
+        drop(lock);
 
-        // NOTE: This ordering ensures that at least one of `cancelled` or `condvar_mutex` is locked continuously
-        // from the return of `.wait_timeout_while()` until the `TimerGuard` is dropped. This prevents `self.cancel()`
-        // and `self.resume()` from being called at any time within this "locking-window". The only method of
-        // `CancellableTimer` that can be called in this window is `self.cancelled()`
-        let cancelled_read = self.cancelled.read().unwrap();
-        drop(condvar_lock);
-
-        result
-            .timed_out()
-            .then_some(TimerGuard::new(start_lock, cancelled_read))
+        result.timed_out().then_some(TimerGuard(start_lock))
     }
 }
 
-pub struct TimerGuard<'a> {
-    start_lock: MutexGuard<'a, Instant>,
-    _cancelled_read: RwLockReadGuard<'a, bool>,
-}
+pub struct TimerGuard<'a>(MutexGuard<'a, Instant>);
 
 impl TimerGuard<'_> {
     pub fn reset(mut self) -> Instant {
-        *self.start_lock = Instant::now();
-        *self.start_lock
-    }
-}
-
-// Private Helper Code =================================================================================================
-
-impl CancellableTimer {
-    // NOTE: This is a vile hack to get around the deadlock described in the documentation for `RwLock` — in short, it's
-    // default behaviour for `RwLock.read()` to block if another `RwLock.write()` call is waiting somewhere, even if
-    // there is already a `RwLockReadGuard` floating around somewhere! This is to avoid writer starvation, but is
-    // causing a deadlock in my code. I'll hack my way around that by just spinning with `RwLock.try_write()` which
-    // doesn't block like `RwLock.write()` does
-    fn cancelled_writer(&self) -> RwLockWriteGuard<'_, bool> {
-        loop {
-            match self.cancelled.try_write() {
-                Ok(write_guard) => return write_guard,
-                Err(TryLockError::WouldBlock) => {}
-                _ => panic!(),
-            }
-        }
-    }
-}
-
-impl<'a> TimerGuard<'a> {
-    const fn new(
-        start_lock: MutexGuard<'a, Instant>,
-        cancelled_read: RwLockReadGuard<'a, bool>,
-    ) -> Self {
-        Self {
-            start_lock,
-            // NOTE: It's important that we hold this lock open, but we never actually need to access its contents via
-            // `TimerGuard`, so it's marked with an underscore (`_`) to stop Rust from complaining that it's unused
-            _cancelled_read: cancelled_read,
-        }
+        *self.0 = Instant::now();
+        *self.0
     }
 }
 

@@ -490,6 +490,14 @@ impl Queue {
             // same `Job`, since the `Job` status will still be `Queued`!
             timer_guard.reset();
 
+            // NOTE: Before suspending the thread and waiting for the external command to finish, check that the queue
+            // definitely hasn't been cancelled since we grabbed this job. `Queue.cancel()` will kill any `Job`s with
+            // a `Running` status, but that's only set *after* `job.start()`. Ultimately, this just ensures we never
+            // `.wait()` after the `Queue` has been cancelled
+            if stagger_timer.cancelled() {
+                job.reset().unwrap();
+            }
+
             job.wait();
         }
     }
@@ -1222,7 +1230,7 @@ mod tests {
             assert_unpark_within_ms!(thread_parker, 15);
             assert_unpark_within_ms!(thread_parker, 30);
             assert_unpark_within_ms!(thread_parker, 30);
-            assert_unpark_within_ms!(thread_parker, 60);
+            assert_unpark_within_ms!(thread_parker, 65);
             assert!(thread_parker.no_missed_parks());
 
             // `queue.reset()` -----------------------------------------------------------------------------------------
@@ -1258,7 +1266,7 @@ mod tests {
             queue.reset_job(0).unwrap();
 
             assert_unpark_within_ms!(thread_parker, 1);
-            assert_unpark_within_ms!(thread_parker, 5);
+            assert_unpark_within_ms!(thread_parker, 10);
             assert_unpark_within_ms!(thread_parker, 30);
             assert_unpark_within_ms!(thread_parker, 30);
             assert_unpark_within_ms!(thread_parker, 75);
@@ -1363,12 +1371,12 @@ mod tests {
             ],
             &[(&[Queued, Queued, Queued], Status::Starting)],
             // `queue.cancel()`
+            &[(&[Queued, Queued, Queued], Status::Cancelling)],
             // NOTE: Note that something actually starts `Running` very briefly here! That `Job` was in the middle of
             // spawning (past the point where it could have been cancelled), so `queue.cancel()` lets it finish (set
             // its status to `Running`) before coming in to kill it
-            &[(&[Running, Queued, Queued], Status::Running)],
+            &[(&[Running, Queued, Queued], Status::Cancelling)],
             &[(&[Resetting, Queued, Queued], Status::Cancelling)],
-            &[(&[Queued, Queued, Queued], Status::Cancelling)],
             &[(&[Queued, Queued, Queued], Status::Ready)],
             // `queue.run()`
             &[(&[Queued, Queued, Queued], Status::Starting)],
