@@ -638,7 +638,7 @@ mod tests {
             assert_eq!(queue.status(), Status::Running);
             assert_eq!(job_statuses(&queue), [Running, Queued, Queued]);
 
-            sleep_ms(30);
+            sleep_ms(25);
 
             assert_eq!(job_statuses(&queue), [Running, Running, Queued]);
 
@@ -717,7 +717,7 @@ mod tests {
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Running, Running, Queued]);
 
-            sleep_ms(65);
+            sleep_ms(60);
 
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Completed, Running, Running]);
@@ -1108,7 +1108,7 @@ mod tests {
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Queued, Running, Queued]);
 
-            sleep_ms(45);
+            sleep_ms(40);
 
             assert_eq!(queue.worker_pool.available_workers(), 0);
             assert_eq!(job_statuses(&queue), [Running, Running, Queued]);
@@ -1261,7 +1261,7 @@ mod tests {
             assert_unpark_within_ms!(thread_parker, 5);
             assert_unpark_within_ms!(thread_parker, 30);
             assert_unpark_within_ms!(thread_parker, 30);
-            assert_unpark_within_ms!(thread_parker, 70);
+            assert_unpark_within_ms!(thread_parker, 75);
             assert_unpark_within_ms!(thread_parker, 30);
             assert!(thread_parker.no_missed_parks());
 

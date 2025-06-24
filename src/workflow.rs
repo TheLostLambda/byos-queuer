@@ -2,7 +2,7 @@
 use std::{
     ffi::OsStr,
     fs::{self, File},
-    io::Seek,
+    io::{BufWriter, Seek},
     path::{self, Path, PathBuf},
     process::Output,
 };
@@ -175,8 +175,8 @@ impl Workflow {
     }
 
     fn write_wflw(wflw_path: &Path, workflow_json: &Value) -> Result<()> {
-        let mut wflw_file = File::create(wflw_path)?;
-        serde_json::to_writer_pretty(&mut wflw_file, workflow_json)?;
+        let mut wflw_file = BufWriter::new(File::create(wflw_path)?);
+        serde_json::to_writer(&mut wflw_file, workflow_json)?;
 
         Ok(())
     }
