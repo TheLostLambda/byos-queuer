@@ -515,7 +515,7 @@ mod tests {
 
     use crate::{
         assert_unpark_within_ms,
-        job::StatusDiscriminant::{self as JobStatusDiscriminant, *},
+        job::tests::StatusDiscriminant::{self as JobStatusDiscriminant, *},
         worker_pool::tests::{ThreadParker, sleep_ms},
         workflow::tests::{
             BASE_WORKFLOW, MODIFICATIONS_FILE, PROTEIN_FASTA_FILE, SAMPLE_FILES, WORKFLOW_NAME,
@@ -1101,7 +1101,7 @@ mod tests {
             queue.reset_job(0).unwrap();
 
             assert_eq!(queue.worker_pool.available_workers(), 0);
-            assert_eq!(job_statuses(&queue), [Stopping, Running, Queued]);
+            assert_eq!(job_statuses(&queue), [Resetting, Running, Queued]);
 
             sleep_ms(15);
 
@@ -1353,10 +1353,10 @@ mod tests {
             &[(&[Running, Running, Running], Status::Running)],
             &[(&[Failed, Running, Running], Status::Running)],
             // `queue.reset()`
-            &[(&[Queued, Stopping, Stopping], Status::Starting)],
+            &[(&[Queued, Resetting, Resetting], Status::Starting)],
             &[
-                (&[Queued, Queued, Stopping], Status::Starting),
-                (&[Queued, Stopping, Queued], Status::Starting),
+                (&[Queued, Queued, Resetting], Status::Starting),
+                (&[Queued, Resetting, Queued], Status::Starting),
                 // NOTE: It's possible that both `Stopping` `Job`s finish at around the same time and, even if there
                 // will still be two calls to `on_update`, the first of those calls could observe this state
                 (&[Queued, Queued, Queued], Status::Starting),
@@ -1367,7 +1367,7 @@ mod tests {
             // spawning (past the point where it could have been cancelled), so `queue.cancel()` lets it finish (set
             // its status to `Running`) before coming in to kill it
             &[(&[Running, Queued, Queued], Status::Running)],
-            &[(&[Stopping, Queued, Queued], Status::Cancelling)],
+            &[(&[Resetting, Queued, Queued], Status::Cancelling)],
             &[(&[Queued, Queued, Queued], Status::Cancelling)],
             &[(&[Queued, Queued, Queued], Status::Ready)],
             // `queue.run()`
@@ -1375,14 +1375,14 @@ mod tests {
             &[(&[Running, Queued, Queued], Status::Running)],
             &[(&[Running, Running, Queued], Status::Running)],
             // `queue.reset_job(0)`
-            &[(&[Stopping, Running, Queued], Status::Running)],
+            &[(&[Resetting, Running, Queued], Status::Running)],
             &[(&[Queued, Running, Queued], Status::Running)],
             &[(&[Running, Running, Queued], Status::Running)],
             &[(&[Running, Running, Running], Status::Running)],
             &[(&[Failed, Running, Running], Status::Running)],
             &[(&[Failed, Running, Completed], Status::Running)],
             // `queue.cancel()`
-            &[(&[Failed, Stopping, Completed], Status::Stopping)],
+            &[(&[Failed, Resetting, Completed], Status::Stopping)],
             &[(&[Failed, Queued, Completed], Status::Stopping)],
             &[(&[Failed, Queued, Completed], Status::Paused)],
             // `queue.run()`

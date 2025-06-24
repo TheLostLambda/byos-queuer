@@ -133,31 +133,6 @@ impl Job {
     }
 }
 
-// NOTE: This is primarily useful for test code where I don't care about any of the `Status` fields, but I do need a
-// `PartialEq` implementation to use `assert_eq!(...)`
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum StatusDiscriminant {
-    Queued,
-    Running,
-    Stopping,
-    Completed,
-    Failed,
-    Abandoned,
-}
-
-impl From<Status> for StatusDiscriminant {
-    fn from(value: Status) -> Self {
-        match value {
-            Status::Queued => Self::Queued,
-            Status::Running(..) => Self::Running,
-            Status::Resetting => Self::Stopping,
-            Status::Completed(..) => Self::Completed,
-            Status::Failed(..) => Self::Failed,
-            Status::Abandoned => Self::Abandoned,
-        }
-    }
-}
-
 // Unit Tests ==========================================================================================================
 
 #[cfg(test)]
@@ -176,12 +151,37 @@ pub mod tests {
     };
 
     use super::*;
-    use StatusDiscriminant::*;
 
     // TODO: On Windows, use `formatc!()` here to change the prefix between `tests/scripts/windows` and
     // `tests/scripts/unix` at compile time
     const COMPLETES_PATH: &str = "tests/scripts/job-completes";
     const FAILS_PATH: &str = "tests/scripts/job-fails";
+
+    // NOTE: This is primarily useful for test code where I don't care about any of the `Status` fields, but I do need a
+    // `PartialEq` implementation to use `assert_eq!(...)`
+    #[derive(Clone, Eq, PartialEq, Debug)]
+    pub enum StatusDiscriminant {
+        Queued,
+        Running,
+        Resetting,
+        Completed,
+        Failed,
+        Abandoned,
+    }
+    use StatusDiscriminant::*;
+
+    impl From<Status> for StatusDiscriminant {
+        fn from(value: Status) -> Self {
+            match value {
+                Status::Queued => Self::Queued,
+                Status::Running(..) => Self::Running,
+                Status::Resetting => Self::Resetting,
+                Status::Completed(..) => Self::Completed,
+                Status::Failed(..) => Self::Failed,
+                Status::Abandoned => Self::Abandoned,
+            }
+        }
+    }
 
     impl Job {
         fn run(&self) -> Result<()> {
@@ -193,7 +193,7 @@ pub mod tests {
     }
 
     fn status(job: &Job) -> StatusDiscriminant {
-        StatusDiscriminant::from(job.status())
+        job.status().into()
     }
 
     #[test]
