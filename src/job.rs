@@ -19,7 +19,7 @@ use crate::{handle::Handle, on_update::OnUpdate, workflow::Workflow};
 #[derive(Clone)]
 pub enum Status {
     Queued,
-    Running(Arc<Handle>, Instant),
+    Running(Handle, Instant),
     Resetting,
     Completed(Duration),
     Failed(Arc<Report>, Duration),
@@ -98,7 +98,7 @@ impl Job {
     pub fn start(&self) -> Result<()> {
         match self.status() {
             Status::Queued => {
-                let handle = Arc::new(self.workflow.start()?);
+                let handle = self.workflow.start()?;
                 *self.status.lock().unwrap() = Status::Running(handle, Instant::now());
                 self.on_update.call();
 

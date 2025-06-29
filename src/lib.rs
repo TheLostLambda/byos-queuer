@@ -1,6 +1,7 @@
 mod cancellable_timer;
 mod handle;
 mod job;
+mod lifecycle;
 mod modifications;
 mod on_update;
 mod proteins;
