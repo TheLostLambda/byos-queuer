@@ -12,16 +12,11 @@ use color_eyre::{
     Result,
     eyre::{Context, eyre},
 };
-use duct::cmd;
+use process_wrap::std::StdCommandWrap;
 use serde_json::Value;
 
 // Local Crate Imports
-use crate::{
-    handle::{Handle, Hook},
-    modifications::Modifications,
-    proteins::Proteins,
-    samples::Samples,
-};
+use crate::{handle::Handle, modifications::Modifications, proteins::Proteins, samples::Samples};
 
 // Public API ==========================================================================================================
 
@@ -214,16 +209,13 @@ impl Workflow {
                 Ok(())
             };
 
-            let cmd = cmd!(
-                Self::BYOS_EXE,
-                "--mode=create-project",
-                "--input",
-                &wflw_path,
-                "--output",
-                &result_file
-            )
-            .stderr_to_stdout()
-            .stdout_path(&log_file);
+            let mut command = StdCommandWrap::with_new(Self::BYOS_EXE, |c| {
+                c.arg("--mode=create-project")
+                    .arg("--input")
+                    .arg(&wflw_path)
+                    .arg("--output")
+                    .arg(&result_file);
+            });
 
             // NOTE: This is needed on Windows to stop terminals from popping open whenever a job is run
             #[cfg(windows)]
@@ -239,7 +231,8 @@ impl Workflow {
                 Ok(())
             });
 
-            let cleanup_outputs = |wflw_path: &Path, result_path: &Path| {
+            // FIXME: Can I get rid of that explicit return type?
+            let cleanup_outputs = |wflw_path: &Path, result_path: &Path| -> Result<()> {
                 fs::remove_file(wflw_path)?;
                 fs::remove_dir_all(result_path)?;
                 Ok(())
@@ -255,44 +248,41 @@ impl Workflow {
             let post_kill = {
                 let wflw_path = wflw_path.clone();
                 let result_path = result_path.clone();
-                Box::new(move |result| cleanup_outputs(&wflw_path, &result_path).and(result))
+                Box::new(move || cleanup_outputs(&wflw_path, &result_path))
             };
 
-            let post_finish: Hook = if working_directory.is_some() {
-                let working_wflw_path = wflw_path.clone();
-                let working_result_path = result_path.clone();
-                // SAFETY: My code has full control over `wflw_path`, `result_path`, and `log_file`, so I can guarantee
-                // that `.file_name()` will always return `Some(...)` and `.unwrap()` will never panic
-                let output_wflw_path =
-                    output_directory.join(working_wflw_path.file_name().unwrap());
-                let output_result_path =
-                    output_directory.join(working_result_path.file_name().unwrap());
-                let output_log_file = output_result_path.join(log_file.file_name().unwrap());
-                Box::new(move |result| {
-                    fs::copy(&working_wflw_path, &output_wflw_path)?;
-                    dircpy::CopyBuilder::new(&working_result_path, &output_result_path)
-                        .overwrite(true)
-                        .run_par()?;
-
-                    cleanup_outputs(&working_wflw_path, &working_result_path)?;
-
-                    map_err_to_log_file(result, &output_log_file)
-                })
-            } else {
-                let log_file = log_file.clone();
-                Box::new(move |result| map_err_to_log_file(result, &log_file))
-            };
+            let log_file = log_file.clone();
+            // let post_finish: DynHook = if working_directory.is_some() {
+            //     let working_wflw_path = wflw_path.clone();
+            //     let working_result_path = result_path.clone();
+            //     // SAFETY: My code has full control over the `wflw_` and `result_` paths, so I can guarantee that
+            //     // `.file_name()` will always return `Some(...)` and `.unwrap()` will never panic
+            //     let output_wflw_path =
+            //         output_directory.join(working_wflw_path.file_name().unwrap());
+            //     let output_result_path =
+            //         output_directory.join(working_result_path.file_name().unwrap());
+            //     Box::new(move || {
+            //         fs::copy(&working_wflw_path, &output_wflw_path)?;
+            //         dircpy::CopyBuilder::new(&working_result_path, &output_result_path)
+            //             .overwrite(true)
+            //             .run_par()?;
+            //         cleanup_outputs(&working_wflw_path, &working_result_path)?;
+            //         map_err_to_log_file(result, &log_file)
+            //     })
+            // } else {
+            //     Box::new(move || map_err_to_log_file(result, &log_file))
+            // };
 
             // ---------------------------------------------------------------------------------------------------------
 
             pre_start()?;
 
-            let mut handle: Handle = cmd
-                .start()
+            let mut handle: Handle = command
+                .spawn()
                 .wrap_err_with(|| format!("failed to run workflow {name}"))?
                 .into();
 
-            handle.post_kill(post_kill).post_finish(post_finish);
+            // handle.post_kill(post_kill).post_finish(post_finish);
 
             Ok(handle)
         };

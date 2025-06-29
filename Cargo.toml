@@ -10,7 +10,7 @@ edition = "2024"
 color-eyre = "0.6.5"
 dioxus = "0.7.9"
 dircpy = "0.3.19"
-duct = "1.0.0"
+process-wrap = { git = "https://github.com/TheLostLambda/process-wrap.git", version = "8.2.1", default-features = false, features = ["std", "job-object", "creation-flags"] }
 seq_io = "0.3.4"
 serde_json = "1.0.140"
 tokio = "1.45.1"
