@@ -3,5 +3,7 @@ name = "Byos Queuer"
 
 [bundle]
 identifier = "ac.uk.mesnage-lab"
-publisher = "Mesnage Lab"
+publisher = "Brooks Rady"
+short_description = "A GUI for queuing Byos workflows"
+long_description = "A simple GUI for queuing Byos workflows and running them in parallel"
 icon = ["assets/favicon.ico"]
