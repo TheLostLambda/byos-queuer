@@ -8,7 +8,7 @@ edition = "2024"
 
 [dependencies]
 color-eyre = "0.6.5"
-dioxus = { version = "0.6.3", features = [] }
+dioxus = "0.7.9"
 dircpy = "0.3.19"
 duct = "1.0.0"
 seq_io = "0.3.4"

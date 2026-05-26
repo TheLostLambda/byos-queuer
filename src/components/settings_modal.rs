@@ -31,7 +31,9 @@ pub fn SettingsModal(id: &'static str) -> Element {
         stagger_duration.set(read_stagger_duration());
     };
 
-    let onsubmit = move |_| {
+    let onsubmit = move |e: Event<FormData>| {
+        e.prevent_default();
+
         // SAFETY: Submission should only be possible if all of the required values are `Some(...)`, so these unwraps
         // should never panic
         let workers = workers().unwrap();

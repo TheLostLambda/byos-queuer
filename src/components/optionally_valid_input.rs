@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 
 #[component]
 pub fn OptionallyValidInput<T: Clone + ToString + FromStr + PartialEq + 'static>(
-    value: ReadOnlySignal<Option<T>>,
+    value: ReadSignal<Option<T>>,
     oninput: EventHandler<Option<T>>,
     #[props(extends = GlobalAttributes, extends = input)] input_attributes: Vec<Attribute>,
 ) -> Element {

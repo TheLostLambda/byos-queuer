@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use dioxus::prelude::*;
+use dioxus::{core::needs_update, prelude::*};
 use tokio::time::sleep;
 
 #[derive(Copy, Clone, PartialEq)]

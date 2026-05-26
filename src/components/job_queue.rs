@@ -1,4 +1,4 @@
-use dioxus::prelude::*;
+use dioxus::{core::schedule_update, prelude::*};
 
 use crate::{
     QUEUE,

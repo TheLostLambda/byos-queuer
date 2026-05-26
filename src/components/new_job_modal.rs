@@ -31,7 +31,9 @@ pub fn NewJobModal(id: &'static str) -> Element {
         document::eval(&format!("{id}.close()"));
     };
 
-    let onsubmit = move |_| {
+    let onsubmit = move |e: Event<FormData>| {
+        e.prevent_default();
+
         let queue_jobs = if grouped() {
             Queue::queue_grouped_job
         } else {

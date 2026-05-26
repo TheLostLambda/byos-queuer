@@ -54,7 +54,14 @@ pub fn FilePathPicker(
                 input {
                     class: "h-0 w-0 p-0 opacity-0",
                     onchange: move |event| {
-                        *value.write() = event.files().unwrap().files();
+                        // TODO: This could perhaps be done better (by actually using the `FileData`
+                        // objects provided by Dioxus), but just converting the `PathBuf`s to
+                        // `String`s was the quickest way to migrate from Dioxus 0.6 to 0.7
+                        *value.write() = event
+                            .files()
+                            .into_iter()
+                            .map(|f| f.path().into_os_string().into_string().unwrap())
+                            .collect();
                     },
                     r#type: "file",
                     directory,
