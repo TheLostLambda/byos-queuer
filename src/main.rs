@@ -22,7 +22,7 @@ const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 
 const INDEX_HTML: &str = include_str!("../index.html");
 
-const DEFAULT_WORKERS: usize = 6;
+const DEFAULT_WORKERS: usize = 12;
 const DEFAULT_STAGGER_DURATION: Duration = Duration::from_secs(3);
 
 pub static QUEUE: LazyLock<RwLock<Queue>> =
