@@ -23,7 +23,7 @@ pub fn JobQueue() -> Element {
             }
             ol { class: "list bg-base-100 rounded-box",
 
-                for (index , (name , status)) in jobs.into_iter().enumerate() {
+                for (index, (name, status)) in jobs.into_iter().enumerate() {
                     Job { index, name, status }
                 }
 
