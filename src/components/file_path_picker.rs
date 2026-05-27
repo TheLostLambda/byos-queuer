@@ -52,7 +52,7 @@ pub fn FilePathPicker(
             label { class: "cursor-pointer truncate",
                 {input_text}
                 input {
-                    class: "h-0 w-0 p-0 opacity-0",
+                    class: "absolute h-0 w-0 p-0 opacity-0",
                     onchange: move |event| {
                         // TODO: This could perhaps be done better (by actually using the `FileData`
                         // objects provided by Dioxus), but just converting the `PathBuf`s to
