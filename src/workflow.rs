@@ -258,16 +258,16 @@ impl Workflow {
                 Box::new(move |result| cleanup_outputs(&wflw_path, &result_path).and(result))
             };
 
-            let log_file = log_file.clone();
             let post_finish: Hook = if working_directory.is_some() {
                 let working_wflw_path = wflw_path.clone();
                 let working_result_path = result_path.clone();
-                // SAFETY: My code has full control over the `wflw_` and `result_` paths, so I can guarantee that
-                // `.file_name()` will always return `Some(...)` and `.unwrap()` will never panic
+                // SAFETY: My code has full control over `wflw_path`, `result_path`, and `log_file`, so I can guarantee
+                // that `.file_name()` will always return `Some(...)` and `.unwrap()` will never panic
                 let output_wflw_path =
                     output_directory.join(working_wflw_path.file_name().unwrap());
                 let output_result_path =
                     output_directory.join(working_result_path.file_name().unwrap());
+                let output_log_file = output_result_path.join(log_file.file_name().unwrap());
                 Box::new(move |result| {
                     fs::copy(&working_wflw_path, &output_wflw_path)?;
                     dircpy::CopyBuilder::new(&working_result_path, &output_result_path)
@@ -276,9 +276,10 @@ impl Workflow {
 
                     cleanup_outputs(&working_wflw_path, &working_result_path)?;
 
-                    map_err_to_log_file(result, &log_file)
+                    map_err_to_log_file(result, &output_log_file)
                 })
             } else {
+                let log_file = log_file.clone();
                 Box::new(move |result| map_err_to_log_file(result, &log_file))
             };
 
